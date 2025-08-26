@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0-android</TargetFramework>
+		<OutputType>Exe</OutputType>
+		<SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+
+		<ApplicationTitle>Shimmer Android Bridge</ApplicationTitle>
+		<ApplicationId>com.example.shimmerbridge.cs</ApplicationId>
+		<ApplicationVersion>3</ApplicationVersion>
+		<ApplicationDisplayVersion>1.0.2</ApplicationDisplayVersion>
+
+		<AndroidUseLatestPlatformSdk>true</AndroidUseLatestPlatformSdk>
+		<TargetSdkVersion>34</TargetSdkVersion>
+		<MinSdkVersion>26</MinSdkVersion>
+		<DefineConstants>$(DefineConstants);ANDROID</DefineConstants>
+	</PropertyGroup>
+
+	<!-- Layout & Manifest -->
+	<ItemGroup>
+		<AndroidResource Include="Resources\layout\activity_main.axml" />
+		<AndroidManifest Include="Properties\AndroidManifest.xml" />
+	</ItemGroup>
+
+	<!-- ShimmerAPI: aggiorna il path se necessario -->
+	<ItemGroup>
+		<ProjectReference Include="..\ShimmerAPI\ShimmerAPI\ShimmerAPI.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="WatsonWebsocket" Version="*" />
+	</ItemGroup>
+</Project>

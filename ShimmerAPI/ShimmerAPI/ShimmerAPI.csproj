@@ -1,0 +1,44 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
+		<Platforms>AnyCPU;x86</Platforms>
+		<PlatformTarget>AnyCPU</PlatformTarget>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+		<GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+		<DebugType>embedded</DebugType>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
+		<GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+		<DebugType>embedded</DebugType>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+		<DebugType>embedded</DebugType>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x86'">
+		<GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+		<DebugType>embedded</DebugType>
+	</PropertyGroup>
+
+	<!-- Libreria nativa SOLO per Windows -->
+	<ItemGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+		<None Remove="libs\ShimmerClosedLibraryRev0_5.dll" />
+		<EmbeddedResource Include="libs\ShimmerClosedLibraryRev0_5.dll" />
+	</ItemGroup>
+
+	<!-- Pacchetti comuni -->
+	<ItemGroup>
+		<PackageReference Include="Google.Protobuf" Version="3.17.3" />
+		<PackageReference Include="Grpc.Tools" Version="2.38.1">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="System.IO.Ports" Version="5.0.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Properties\" />
+	</ItemGroup>
+</Project>

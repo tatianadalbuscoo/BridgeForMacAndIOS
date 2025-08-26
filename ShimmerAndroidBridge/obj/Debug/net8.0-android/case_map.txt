@@ -1,0 +1,6 @@
+drawable\btn_accent;drawable\btn_accent
+drawable\btn_primary;drawable\btn_primary
+drawable\card;drawable\card
+layout\activity_main;layout\activity_main
+values\colors;values\colors
+values\styles;values\styles

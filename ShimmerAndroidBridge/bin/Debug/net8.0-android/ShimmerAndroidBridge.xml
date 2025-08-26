@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>ShimmerAndroidBridge</name>
+    </assembly>
+    <members>
+        <member name="T:XR2Learn_ShimmerAPI.IMU.Android.AndroidBluetoothConnection">
+            <summary>Connessione RFCOMM SPP verso Shimmer con retry/fallback e timeout.</summary>
+        </member>
+        <member name="M:XR2Learn_ShimmerAPI.IMU.Android.AndroidBluetoothConnection.CreateReflectChannel1(Android.Bluetooth.BluetoothDevice)">
+            <summary>Fallback via reflection: createRfcommSocket(int channel=1).</summary>
+        </member>
+        <member name="M:XR2Learn_ShimmerAPI.IMU.Android.AndroidBluetoothConnection.TryConnect(Android.Bluetooth.BluetoothSocket,System.Exception@)">
+            <summary>Tenta la connessione con timeout; prepara gli stream su successo.</summary>
+        </member>
+        <member name="T:XR2Learn_ShimmerAPI.IMU.Android.IShimmerConnection">
+            <summary>Astrazione di trasporto per ShimmerBluetooth (solo Android).</summary>
+        </member>
+        <member name="T:XR2Learn_ShimmerAPI.IMU.Android.ShimmerBluetoothTransport">
+            <summary>
+            Adattatore: espone l’API ShimmerBluetooth usando IShimmerConnection (BT).
+            </summary>
+        </member>
+        <member name="T:XR2Learn_ShimmerAPI.IMU.Android.ShimmerLogAndStreamAndroidBluetoothV2">
+            <summary>
+            Wrapper Android con stesse API del V2 Windows (cambia solo il trasporto).
+            </summary>
+        </member>
+        <member name="M:XR2Learn_ShimmerAPI.IMU.Android.Util.ByteArrayToHex(System.Byte[])">
+            <summary>
+            Converte un array di byte in stringa esadecimale (es. "01-0A-FF").
+            </summary>
+        </member>
+        <member name="M:XR2Learn_ShimmerAPI.IMU.Android.Util.ByteArrayToHexCompact(System.Byte[])">
+            <summary>
+            Converte un array di byte in stringa esadecimale continua (es. "010AFF").
+            </summary>
+        </member>
+        <member name="M:XR2Learn_ShimmerAPI.IMU.Android.Util.PrintHex(System.String,System.Byte[])">
+            <summary>
+            Stampa su log Android un array di byte in esadecimale.
+            </summary>
+        </member>
+        <member name="M:XR2Learn_ShimmerAPI.IMU.Android.Util.RoundToDecimals(System.Double,System.Int32)">
+            <summary>
+            Arrotonda un valore double al numero di decimali specificato.
+            </summary>
+        </member>
+        <member name="M:XR2Learn_ShimmerAPI.IMU.Android.Util.IsNullOrEmpty(System.Byte[])">
+            <summary>
+            Restituisce true se l'array è nullo o vuoto.
+            </summary>
+        </member>
+    </members>
+</doc>

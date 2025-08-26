@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<!-- App palette (soft beige + caramel) -->
+	<color name="bg">#FAF1E6</color>
+	<!-- app background -->
+	<color name="surface">#FFFEFC</color>
+	<!-- cards -->
+	<color name="text">#7B4F2C</color>
+	<!-- main text (brown) -->
+	<color name="textMuted">#9A6C47</color>
+
+	<color name="caramel">#C3743B</color>
+	<!-- primary button -->
+	<color name="caramelDark">#A66131</color>
+	<!-- status bar / pressed -->
+	<color name="caramelLight">#E7B085</color>
+	<!-- highlight/ripple -->
+
+	<!-- keep these names for existing drawables -->
+	<color name="gray200">#EDE3D6</color>
+	<!-- soft border for card -->
+	<color name="gray300">#E5D6C5</color>
+	<!-- soft ripple for buttons -->
+	<color name="white">#FFFFFF</color>
+</resources>

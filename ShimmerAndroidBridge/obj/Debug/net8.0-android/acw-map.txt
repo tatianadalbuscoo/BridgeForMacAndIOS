@@ -1,0 +1,3 @@
+com.example.shimmerbridge.cs.MainActivity, ShimmerAndroidBridge;crc647106226736097830.MainActivity
+com.example.shimmerbridge.cs.MainActivity;crc647106226736097830.MainActivity
+com.example.shimmerbridge.cs.MainActivity;crc647106226736097830.MainActivity

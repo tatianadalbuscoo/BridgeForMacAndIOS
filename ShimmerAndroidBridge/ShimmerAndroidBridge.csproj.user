@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <SelectedDevice>Samsung SM-P610</SelectedDevice>
+    <SelectedPlatformGroup>PhysicalDevice</SelectedPlatformGroup>
+    <ActiveDebugProfile>Samsung SM-P610 (Android 11.0 - API 30)</ActiveDebugProfile>
+    <AndroidDesignerPreferredDevice>7.3in Foldable</AndroidDesignerPreferredDevice>
+  </PropertyGroup>
+</Project>
