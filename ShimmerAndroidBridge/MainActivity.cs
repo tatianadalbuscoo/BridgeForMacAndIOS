@@ -187,36 +187,51 @@ namespace com.example.shimmerbridge.cs
 
         async Task ConnectAndStartAsync()
         {
-            // 1) Avvia SEMPRE il WS (anche senza device spuntati)
-            await _ws.StartAsync(this, 8787);
-            _status.Text = "Status: bridge attivo su porta 8787 (in attesa client)…";
-
-            // 2) Raccogli i device spuntati (opzionale, per sessioni locali)
-            var targets = _devices
+            // Collect selected devices (those with Connect checked)
+            var selected = _devices
                 .Where(x => x.Connect.Checked)
-                .Select(x => (x, Cfg: new ShimmerConfig
-                {
-                    EnableLowNoiseAccelerometer = x.LnAcc.Checked,
-                    EnableWideRangeAccelerometer = x.WrAcc.Checked,
-                    EnableGyroscope = x.Gyro.Checked,
-                    EnableMagnetometer = x.Mag.Checked,
-                    EnablePressureTemperature = x.Press.Checked,
-                    EnableBattery = x.Batt.Checked,
-                    EnableExtA6 = x.A6.Checked,
-                    EnableExtA7 = x.A7.Checked,
-                    EnableExtA15 = x.A15.Checked
-                }))
-                .Where(t => AnySensorEnabled(t.Cfg))
                 .ToList();
 
-            // 3) Se NON hai spuntato device -> "bridge-only": fine!
-            if (targets.Count == 0)
+            if (selected.Count == 0)
             {
-                Toast.MakeText(this, "Bridge attivo (nessuna sessione locale).", ToastLength.Short).Show();
-                return; // Lascia che sia l’iPhone a fare open/config/start via WS
+                Toast.MakeText(this, "Please select at least one device.", ToastLength.Long).Show();
+                _status.Text = "Status: no device selected";
+                return;
             }
 
-            // 4) Altrimenti, apri anche sessioni locali (facoltativo)
+            // Validate sensors per device
+            var noSensor = selected.Where(x => !AnySensorEnabled(x)).ToList();
+            if (noSensor.Count > 0)
+            {
+                var names = string.Join("\n", noSensor.Select(x => $"- {x.Name} [{x.Mac}]"));
+                new Android.App.AlertDialog.Builder(this)
+                    .SetTitle("No sensors selected")
+                    .SetMessage($"Enable at least one sensor for:\n{names}")
+                    .SetPositiveButton("OK", (s, e) => { })
+                    .Show();
+                _status.Text = "Status: sensor selection required";
+                return;
+            }
+
+            // Build configs now that everything is valid
+            var targets = selected.Select(x => (x, Cfg: new ShimmerConfig
+            {
+                EnableLowNoiseAccelerometer = x.LnAcc.Checked,
+                EnableWideRangeAccelerometer = x.WrAcc.Checked,
+                EnableGyroscope = x.Gyro.Checked,
+                EnableMagnetometer = x.Mag.Checked,
+                EnablePressureTemperature = x.Press.Checked,
+                EnableBattery = x.Batt.Checked,
+                EnableExtA6 = x.A6.Checked,
+                EnableExtA7 = x.A7.Checked,
+                EnableExtA15 = x.A15.Checked
+            })).ToList();
+
+            // Start WS server (now that we know we actually have work to do)
+            await _ws.StartAsync(this, 8787);
+            _status.Text = "Status: starting selected devices…";
+
+            // Progress dialog
             var progress = new ProgressBar(this) { Indeterminate = true };
             var dlg = new AlertDialog.Builder(this)
                 .SetTitle("Connecting…")
@@ -228,7 +243,8 @@ namespace com.example.shimmerbridge.cs
             var results = new List<(string name, string mac, bool ok, string? error)>();
             try
             {
-                foreach (var t in targets) // sequenziale = più sicuro su RN-42
+                // Safer sequential open on RN-42
+                foreach (var t in targets)
                 {
                     try
                     {
@@ -245,7 +261,10 @@ namespace com.example.shimmerbridge.cs
                 var errCount = results.Count - okCount;
                 _status.Text = $"Status: streaming {okCount} device(s); errors: {errCount}";
             }
-            finally { try { dlg.Dismiss(); } catch { } }
+            finally
+            {
+                try { dlg.Dismiss(); } catch { }
+            }
 
             var msg = string.Join("\n", results.Select(r => r.ok
                 ? $"✓ {r.name} [{r.mac}] — OK"
@@ -256,6 +275,13 @@ namespace com.example.shimmerbridge.cs
                 .SetPositiveButton("OK", (s, e) => { })
                 .Show();
         }
+
+        // Helper: at least one sensor ticked for a device
+        static bool AnySensorEnabled(DeviceUi d) =>
+            d.LnAcc.Checked || d.WrAcc.Checked || d.Gyro.Checked ||
+            d.Mag.Checked || d.Press.Checked || d.Batt.Checked ||
+            d.A6.Checked || d.A7.Checked || d.A15.Checked;
+
 
 
         private async Task StopAllWithNoticeAsync()
