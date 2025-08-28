@@ -258,3 +258,4 @@ C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\Shi
 C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\ShimmerAndroidBridge\obj\Debug\net8.0-android\stamp\_GenerateJavaStubs.stamp
 C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\ShimmerAndroidBridge\obj\Debug\net8.0-android\stamp\_GeneratePackageManagerJava.stamp
 C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\ShimmerAndroidBridge\obj\Debug\net8.0-android\stamp\_ResolveLibraryProjectImports.stamp
+C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\ShimmerAndroidBridge\obj\Debug\net8.0-android\ShimmerAndroidBridge.sourcelink.json

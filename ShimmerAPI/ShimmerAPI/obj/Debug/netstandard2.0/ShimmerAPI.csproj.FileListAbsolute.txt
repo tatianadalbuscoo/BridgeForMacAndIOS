@@ -11,3 +11,4 @@ C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\Shi
 C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\ShimmerAPI\ShimmerAPI\obj\Debug\netstandard2.0\ShimmerAPI.GeneratedMSBuildEditorConfig.editorconfig
 C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\ShimmerAPI\ShimmerAPI\obj\Debug\netstandard2.0\ShimmerAPI.csproj.CoreCompileInputs.cache
 C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\ShimmerAPI\ShimmerAPI\obj\Debug\netstandard2.0\ShimmerAPI.dll
+C:\scuola\Master\1 progetto di semestre\shimmergsr-main\ShimmerAndroidBridge\ShimmerAPI\ShimmerAPI\obj\Debug\netstandard2.0\ShimmerAPI.sourcelink.json

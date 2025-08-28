@@ -187,7 +187,11 @@ namespace com.example.shimmerbridge.cs
 
         async Task ConnectAndStartAsync()
         {
-            // take only devices explicitly checked for connection
+            // 1) Avvia SEMPRE il WS (anche senza device spuntati)
+            await _ws.StartAsync(this, 8787);
+            _status.Text = "Status: bridge attivo su porta 8787 (in attesa client)…";
+
+            // 2) Raccogli i device spuntati (opzionale, per sessioni locali)
             var targets = _devices
                 .Where(x => x.Connect.Checked)
                 .Select(x => (x, Cfg: new ShimmerConfig
@@ -202,17 +206,17 @@ namespace com.example.shimmerbridge.cs
                     EnableExtA7 = x.A7.Checked,
                     EnableExtA15 = x.A15.Checked
                 }))
-                // require at least one sensor enabled
                 .Where(t => AnySensorEnabled(t.Cfg))
                 .ToList();
 
+            // 3) Se NON hai spuntato device -> "bridge-only": fine!
             if (targets.Count == 0)
             {
-                Toast.MakeText(this, "Select at least one device (Connect) with one or more sensors enabled.", ToastLength.Long).Show();
-                return;
+                Toast.MakeText(this, "Bridge attivo (nessuna sessione locale).", ToastLength.Short).Show();
+                return; // Lascia che sia l’iPhone a fare open/config/start via WS
             }
 
-            // progress dialog
+            // 4) Altrimenti, apri anche sessioni locali (facoltativo)
             var progress = new ProgressBar(this) { Indeterminate = true };
             var dlg = new AlertDialog.Builder(this)
                 .SetTitle("Connecting…")
@@ -222,12 +226,9 @@ namespace com.example.shimmerbridge.cs
             dlg.Show();
 
             var results = new List<(string name, string mac, bool ok, string? error)>();
-
             try
             {
-                await _ws.StartAsync(this, 8787);
-
-                foreach (var t in targets) // sequential is safer for RN-42
+                foreach (var t in targets) // sequenziale = più sicuro su RN-42
                 {
                     try
                     {
@@ -244,12 +245,8 @@ namespace com.example.shimmerbridge.cs
                 var errCount = results.Count - okCount;
                 _status.Text = $"Status: streaming {okCount} device(s); errors: {errCount}";
             }
-            finally
-            {
-                try { dlg.Dismiss(); } catch { }
-            }
+            finally { try { dlg.Dismiss(); } catch { } }
 
-            // result popup
             var msg = string.Join("\n", results.Select(r => r.ok
                 ? $"✓ {r.name} [{r.mac}] — OK"
                 : $"✗ {r.name} [{r.mac}] — {r.error}"));
@@ -259,6 +256,7 @@ namespace com.example.shimmerbridge.cs
                 .SetPositiveButton("OK", (s, e) => { })
                 .Show();
         }
+
 
         private async Task StopAllWithNoticeAsync()
         {
