@@ -174,31 +174,41 @@ namespace Com.Example.ShimmerBridge
                     }
                 case "open":
                     {
-                        var mac = root.GetProperty("mac").GetString() ?? "";
+                        // 1) MAC robusto
+                        string mac = "";
+                        if (root.TryGetProperty("mac", out var pm)) mac = pm.GetString() ?? "";
+                        mac = mac.Trim();
+                        if (string.IsNullOrWhiteSpace(mac))
+                        {
+                            await SendJson(clientId, new { type = "open_ack", ok = false, error = "no_mac" });
+                            break;
+                        }
+
                         Log?.Invoke($"WS IN open for {mac} (client {clientId})");
 
+                        // 2) Cleanup sessione client
                         if (_wsSessions.TryGetValue(clientId, out var old)) { try { old.Dispose(); } catch { } _wsSessions.TryRemove(clientId, out _); }
 
+                        // 3) Crea sessione e avvia Connect in background (non blocca ACK)
                         var sess = new SppSession(
                             mac,
                             sendText: s => _ws?.SendAsync(clientId, s) ?? Task.CompletedTask,
                             log: msg => Log?.Invoke(msg)
                         );
                         _wsSessions[clientId] = sess;
-
-                        // Avvio connessione SPP in background (non blocca l’ACK)
                         _ = sess.OpenAsync(ackEarly: true);
 
-                        // ACK immediato
+                        // 4) ACK immediato + re-try (200ms, 800ms, 2500ms)
+                        var ack = new { type = "open_ack", ok = true, mac };
                         Log?.Invoke($"WS OUT open_ack for {mac} (client {clientId})");
-                        await SendJson(clientId, new { type = "open_ack", ok = true, mac });
-
-                        // Safety resend dopo 400ms (se per caso il primo frame andasse perso)
-                        _ = Task.Delay(400).ContinueWith(_ =>
-                            _ws?.SendAsync(clientId, JsonSerializer.Serialize(new { type = "open_ack", ok = true, mac })));
+                        await SendJson(clientId, ack);
+                        _ = Task.Delay(200).ContinueWith(_ => _ws?.SendAsync(clientId, JsonSerializer.Serialize(ack)));
+                        _ = Task.Delay(800).ContinueWith(_ => _ws?.SendAsync(clientId, JsonSerializer.Serialize(ack)));
+                        _ = Task.Delay(2500).ContinueWith(_ => _ws?.SendAsync(clientId, JsonSerializer.Serialize(ack)));
 
                         break;
                     }
+
 
 
 
