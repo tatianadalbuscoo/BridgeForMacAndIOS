@@ -54,7 +54,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 6,
+          "SelectedChildIndex": 5,
           "Children": [
             {
               "$type": "Bookmark",
@@ -66,15 +66,28 @@
             },
             {
               "$type": "Bookmark",
-              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
-            },
-            {
-              "$type": "Bookmark",
               "Name": "ST:0:0:{d78612c7-9962-4b83-95d9-268046dad23a}"
             },
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{4a9b7e51-aa16-11d0-a8c5-00a0c921a4d2}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "WsBridgeManager.cs",
+              "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
+              "RelativeDocumentMoniker": "ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
+              "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
+              "RelativeToolTip": "ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
+              "ViewState": "AQIAAMIBAAAAAAAAAAAIwMwBAAA5AAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-08-26T08:33:35.474Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
@@ -87,19 +100,6 @@
               "ViewState": "AQIAAAAAAAAAAAAAAAAAABkAAAAAAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003576|",
               "WhenOpened": "2025-08-26T13:07:47.387Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "WsBridgeManager.cs",
-              "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
-              "RelativeDocumentMoniker": "ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
-              "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
-              "RelativeToolTip": "ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
-              "ViewState": "AQIAAJsCAAAAAAAAAAAmwL0CAAAAAAAA",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-26T08:33:35.474Z",
-              "EditorCaption": ""
             },
             {
               "$type": "Document",

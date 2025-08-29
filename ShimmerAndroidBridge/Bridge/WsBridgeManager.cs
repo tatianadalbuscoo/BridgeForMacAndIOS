@@ -248,6 +248,37 @@ namespace Com.Example.ShimmerBridge
                         break;
                     }
 
+                case "set_sampling_rate":
+                    {
+                        string mac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
+                        double sr = (root.TryGetProperty("sr", out var psr) && psr.ValueKind == JsonValueKind.Number)
+                                    ? psr.GetDouble() : double.NaN;
+
+                        if (mac.Length == 0 || double.IsNaN(sr) || sr <= 0)
+                        {
+                            await SendJson(clientId, new { type = "set_sampling_rate_ack", ok = false, error = "bad_args" });
+                            break;
+                        }
+
+                        if (_macSessions.TryGetValue(mac, out var sess))
+                        {
+                            double applied = await sess.SetSamplingRateAsync(sr);
+
+                            // ACK puntuale al chiamante
+                            await SendJson(clientId, new { type = "set_sampling_rate_ack", ok = true, mac, requested = sr, applied });
+
+                            // broadcast per chi è sottoscritto a quel MAC (invia anche la config con SR aggiornato)
+                            var cfg = sess.CurrentConfig;
+                            await BroadcastToSubscribers(mac, JsonSerializer.Serialize(new { type = "config_changed", mac, cfg }));
+                        }
+                        else
+                        {
+                            await SendJson(clientId, new { type = "set_sampling_rate_ack", ok = false, error = "not_active" });
+                        }
+                        break;
+                    }
+
+
                 // "open" vale come SUBSCRIBE (server-managed)
                 case "open":
                     {
@@ -418,6 +449,41 @@ namespace Com.Example.ShimmerBridge
                 EnableExtA15 = _currentCfg.EnableExtA15,
                 SamplingRate = _currentCfg.SamplingRate
             };
+
+            public async Task<double> SetSamplingRateAsync(double newHz)
+            {
+                if (_core == null) throw new InvalidOperationException("Not open");
+                bool wasStreaming = _handler != null; // se stiamo già streammando
+
+                // 1) Pausa
+                if (wasStreaming)
+                {
+                    try { Stop(); } catch { /* no-op */ }
+                    await Task.Delay(50);
+                }
+
+                // 2) Scrivi sampling rate (round int, come su Android/Win)
+                int sr = (int)Math.Round(newHz);
+                _core.WriteSamplingRate(sr);
+                await Task.Delay(150);
+
+                // 3) Reset mappa segnali e base temporale per una sessione "pulita"
+                _firstMap = true;
+                _tsBase = null;
+
+                // 4) Allinea la config corrente
+                _currentCfg.SamplingRate = sr;
+
+                // 5) Riavvia solo se ci sono sensori attivi
+                if (wasStreaming && WsBridgeManager.AnySensorEnabled(_currentCfg))
+                {
+                    Start();
+                }
+
+                _log($"[CFG] sampling rate set to {sr} Hz");
+                return sr;
+            }
+
 
             // base tempo per ts relativo
             double? _tsBase = null;
