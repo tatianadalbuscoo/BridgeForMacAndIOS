@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using STimers = System.Timers;
 using Com.Example.ShimmerBridge;
 using AndroidResource = ShimmerAndroidBridge.Resource;
 
@@ -22,6 +23,9 @@ namespace com.example.shimmerbridge.cs
 
         readonly WsBridgeManager _ws = new WsBridgeManager();
         readonly List<DeviceUi> _devices = new(); // per-device sensors + connect flag
+        // debounce per MAC
+        readonly Dictionary<string, STimers.Timer> _debouncers = new(StringComparer.OrdinalIgnoreCase);
+
         const string TAG = "ShimmerBridgeUI";
 
         protected override void OnCreate(Bundle? savedInstanceState)
@@ -180,7 +184,61 @@ namespace com.example.shimmerbridge.cs
             card.AddView(a7);
             card.AddView(a15);
 
-            return new DeviceUi(card, d.Name ?? "?", d.Address ?? "?", cbConnect, lnAcc, wrAcc, gyro, mag, press, batt, a6, a7, a15);
+            var ui = new DeviceUi(card, d.Name ?? "?", d.Address ?? "?", cbConnect, lnAcc, wrAcc, gyro, mag, press, batt, a6, a7, a15);
+
+            // --- hook: quando cambi i sensori, riconfiguriamo il MAC con debounce
+            void Hook(CheckBox cb)
+            {
+                cb.CheckedChange += (s, e) =>
+                {
+                    // puoi anche rimuovere questa condizione se vuoi accettare toggles "pre-connessione"
+                    if (!ui.Connect.Checked) return;
+                    DebouncedReconfigure(ui.Mac, () => BuildConfigFromUi(ui));
+                };
+            }
+            Hook(lnAcc); Hook(wrAcc); Hook(gyro); Hook(mag); Hook(press); Hook(batt); Hook(a6); Hook(a7); Hook(a15);
+
+            return ui;
+        }
+
+        // Costruisce la config corrente dai checkbox della card
+        ShimmerConfig BuildConfigFromUi(DeviceUi u) => new ShimmerConfig
+        {
+            EnableLowNoiseAccelerometer = u.LnAcc.Checked,
+            EnableWideRangeAccelerometer = u.WrAcc.Checked,
+            EnableGyroscope = u.Gyro.Checked,
+            EnableMagnetometer = u.Mag.Checked,
+            EnablePressureTemperature = u.Press.Checked,
+            EnableBattery = u.Batt.Checked,
+            EnableExtA6 = u.A6.Checked,
+            EnableExtA7 = u.A7.Checked,
+            EnableExtA15 = u.A15.Checked,
+            SamplingRate = null // opzionale: aggancia qui un controllo SR se lo aggiungi in UI
+        };
+
+        // Debounce lato UI per non tempestare il server mentre l’utente clicca più caselle
+        void DebouncedReconfigure(string mac, Func<ShimmerConfig> build)
+        {
+            if (_debouncers.TryGetValue(mac, out var t))
+            {
+                try { t.Stop(); t.Dispose(); } catch { }
+            }
+            var timer = new STimers.Timer(250) { AutoReset = false };
+            timer.Elapsed += async (_, __) =>
+            {
+                try
+                {
+                    var cfg = build();
+                    await _ws.UpdateConfigAsync(mac, cfg); // se mask=0, lo stream viene fermato dal server
+                    RunOnUiThread(() => _status.Text = $"Status: reconfigured {mac}");
+                }
+                catch (Exception ex)
+                {
+                    RunOnUiThread(() => _status.Text = $"Status: reconfig error {ex.Message}");
+                }
+            };
+            _debouncers[mac] = timer;
+            timer.Start();
         }
 
         int Dp(int dp) => (int)(dp * Resources.DisplayMetrics.Density + 0.5f);
@@ -199,7 +257,7 @@ namespace com.example.shimmerbridge.cs
                 return;
             }
 
-            // Validate sensors per device
+            // Validate sensori per device (almeno uno all’avvio)
             var noSensor = selected.Where(x => !AnySensorEnabled(x)).ToList();
             if (noSensor.Count > 0)
             {
@@ -213,21 +271,10 @@ namespace com.example.shimmerbridge.cs
                 return;
             }
 
-            // Build configs now that everything is valid
-            var targets = selected.Select(x => (x, Cfg: new ShimmerConfig
-            {
-                EnableLowNoiseAccelerometer = x.LnAcc.Checked,
-                EnableWideRangeAccelerometer = x.WrAcc.Checked,
-                EnableGyroscope = x.Gyro.Checked,
-                EnableMagnetometer = x.Mag.Checked,
-                EnablePressureTemperature = x.Press.Checked,
-                EnableBattery = x.Batt.Checked,
-                EnableExtA6 = x.A6.Checked,
-                EnableExtA7 = x.A7.Checked,
-                EnableExtA15 = x.A15.Checked
-            })).ToList();
+            // Build configs
+            var targets = selected.Select(x => (x, Cfg: BuildConfigFromUi(x))).ToList();
 
-            // Start WS server (now that we know we actually have work to do)
+            // Start WS server
             await _ws.StartAsync(this, 8787);
             _status.Text = "Status: starting selected devices…";
 
@@ -243,7 +290,7 @@ namespace com.example.shimmerbridge.cs
             var results = new List<(string name, string mac, bool ok, string? error)>();
             try
             {
-                // Safer sequential open on RN-42
+                // sequential open su RN-42
                 foreach (var t in targets)
                 {
                     try
@@ -276,13 +323,11 @@ namespace com.example.shimmerbridge.cs
                 .Show();
         }
 
-        // Helper: at least one sensor ticked for a device
+        // Helper: almeno un sensore spuntato per la validazione iniziale
         static bool AnySensorEnabled(DeviceUi d) =>
             d.LnAcc.Checked || d.WrAcc.Checked || d.Gyro.Checked ||
             d.Mag.Checked || d.Press.Checked || d.Batt.Checked ||
             d.A6.Checked || d.A7.Checked || d.A15.Checked;
-
-
 
         private async Task StopAllWithNoticeAsync()
         {
@@ -317,14 +362,16 @@ namespace com.example.shimmerbridge.cs
                 .Show();
         }
 
-        static bool AnySensorEnabled(ShimmerConfig c) =>
-            c.EnableLowNoiseAccelerometer || c.EnableWideRangeAccelerometer || c.EnableGyroscope ||
-            c.EnableMagnetometer || c.EnablePressureTemperature || c.EnableBattery ||
-            c.EnableExtA6 || c.EnableExtA7 || c.EnableExtA15;
-
         protected override async void OnDestroy()
         {
             base.OnDestroy();
+            // stop debounce timers
+            foreach (STimers.Timer t in _debouncers.Values)
+            {
+                try { t.Stop(); t.Dispose(); } catch { }
+            }
+            _debouncers.Clear();
+
             await _ws.StopAsync(); // closes WS & all sessions
         }
 

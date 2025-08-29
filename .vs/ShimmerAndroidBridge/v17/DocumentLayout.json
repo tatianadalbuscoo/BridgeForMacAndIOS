@@ -3,12 +3,12 @@
   "WorkspaceRootPath": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|c:\\scuola\\master\\1 progetto di semestre\\shimmergsr-main\\shimmerandroidbridge\\shimmerandroidbridge\\mainactivity.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|solutionrelative:shimmerandroidbridge\\mainactivity.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|c:\\scuola\\master\\1 progetto di semestre\\shimmergsr-main\\shimmerandroidbridge\\shimmerandroidbridge\\bridge\\wsbridgemanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|solutionrelative:shimmerandroidbridge\\bridge\\wsbridgemanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|c:\\scuola\\master\\1 progetto di semestre\\shimmergsr-main\\shimmerandroidbridge\\shimmerandroidbridge\\mainactivity.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|solutionrelative:shimmerandroidbridge\\mainactivity.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|c:\\scuola\\master\\1 progetto di semestre\\shimmergsr-main\\shimmerandroidbridge\\shimmerandroidbridge\\shimmer\\androidbluetoothconnection.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -54,7 +54,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 7,
+          "SelectedChildIndex": 6,
           "Children": [
             {
               "$type": "Bookmark",
@@ -66,19 +66,15 @@
             },
             {
               "$type": "Bookmark",
+              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+            },
+            {
+              "$type": "Bookmark",
               "Name": "ST:0:0:{d78612c7-9962-4b83-95d9-268046dad23a}"
             },
             {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "styles.xml",
-              "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Resources\\values\\styles.xml",
-              "RelativeDocumentMoniker": "ShimmerAndroidBridge\\Resources\\values\\styles.xml",
-              "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Resources\\values\\styles.xml",
-              "RelativeToolTip": "ShimmerAndroidBridge\\Resources\\values\\styles.xml",
-              "ViewState": "AQIAAAMAAAAAAAAAAAAuwDEAAAAAAAAA",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003576|",
-              "WhenOpened": "2025-08-26T13:05:19.25Z"
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{4a9b7e51-aa16-11d0-a8c5-00a0c921a4d2}"
             },
             {
               "$type": "Document",
@@ -94,13 +90,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "WsBridgeManager.cs",
               "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
               "RelativeDocumentMoniker": "ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
               "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
               "RelativeToolTip": "ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
-              "ViewState": "AQIAAMYAAAAAAAAAAAAkwOUAAAAVAAAA",
+              "ViewState": "AQIAAJsCAAAAAAAAAAAmwL0CAAAAAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-08-26T08:33:35.474Z",
               "EditorCaption": ""
@@ -119,20 +115,27 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "MainActivity.cs",
               "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\MainActivity.cs",
               "RelativeDocumentMoniker": "ShimmerAndroidBridge\\MainActivity.cs",
               "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\MainActivity.cs",
               "RelativeToolTip": "ShimmerAndroidBridge\\MainActivity.cs",
-              "ViewState": "AQIAAPgAAAAAAAAAAADwvxsBAAAAAAAA",
+              "ViewState": "AQIAAFcBAAAAAAAAAAAgwHABAAA7AAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-26T08:34:12.676Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-26T08:34:12.676Z"
             },
             {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "styles.xml",
+              "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Resources\\values\\styles.xml",
+              "RelativeDocumentMoniker": "ShimmerAndroidBridge\\Resources\\values\\styles.xml",
+              "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Resources\\values\\styles.xml",
+              "RelativeToolTip": "ShimmerAndroidBridge\\Resources\\values\\styles.xml",
+              "ViewState": "AQIAAAMAAAAAAAAAAAAuwDEAAAAAAAAA",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003576|",
+              "WhenOpened": "2025-08-26T13:05:19.25Z"
             },
             {
               "$type": "Document",
