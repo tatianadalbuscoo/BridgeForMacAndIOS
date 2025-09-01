@@ -450,26 +450,80 @@ namespace Com.Example.ShimmerBridge
                 SamplingRate = _currentCfg.SamplingRate
             };
 
+            // === AGGIUNGERE in SppSession (ad es. subito dopo i campi iTs, iLnaX... ===
+            void ResetIndices()
+            {
+                iTs = -1;
+                iLnaX = iLnaY = iLnaZ = -1;
+                iWraX = iWraY = iWraZ = -1;
+                iGx = iGy = iGz = -1;
+                iMx = iMy = iMz = -1;
+                iTemp = iPress = iVbatt = -1;
+                iA6 = iA7 = iA15 = -1;
+            }
+
+            void RefreshMissingIndices(ObjectCluster oc)
+            {
+                if (iTs == -1) iTs = SafeIdx(oc, ShimmerConfiguration.SignalNames.SYSTEM_TIMESTAMP, "CAL");
+
+                if (_currentCfg.EnableLowNoiseAccelerometer)
+                {
+                    if (iLnaX == -1) iLnaX = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_X, "CAL");
+                    if (iLnaY == -1) iLnaY = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_Y, "CAL");
+                    if (iLnaZ == -1) iLnaZ = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_Z, "CAL");
+                }
+                if (_currentCfg.EnableWideRangeAccelerometer)
+                {
+                    if (iWraX == -1) iWraX = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_X, "CAL");
+                    if (iWraY == -1) iWraY = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_Y, "CAL");
+                    if (iWraZ == -1) iWraZ = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_Z, "CAL");
+                }
+                if (_currentCfg.EnableGyroscope)
+                {
+                    if (iGx == -1) iGx = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_X, "CAL");
+                    if (iGy == -1) iGy = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_Y, "CAL");
+                    if (iGz == -1) iGz = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_Z, "CAL");
+                }
+                if (_currentCfg.EnableMagnetometer)
+                {
+                    if (iMx == -1) iMx = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_X, "CAL");
+                    if (iMy == -1) iMy = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_Y, "CAL");
+                    if (iMz == -1) iMz = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_Z, "CAL");
+                }
+                if (_currentCfg.EnablePressureTemperature)
+                {
+                    if (iTemp == -1) iTemp = SafeIdx(oc, Shimmer3Configuration.SignalNames.TEMPERATURE, "CAL");
+                    if (iPress == -1) iPress = SafeIdx(oc, Shimmer3Configuration.SignalNames.PRESSURE, "CAL");
+                }
+                if (_currentCfg.EnableBattery)
+                {
+                    if (iVbatt == -1) iVbatt = SafeIdx(oc, Shimmer3Configuration.SignalNames.V_SENSE_BATT, "CAL");
+                }
+                if (_currentCfg.EnableExtA6 && iA6 == -1) iA6 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A6, "CAL");
+                if (_currentCfg.EnableExtA7 && iA7 == -1) iA7 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A7, "CAL");
+                if (_currentCfg.EnableExtA15 && iA15 == -1) iA15 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A15, "CAL");
+            }
+
+
             public async Task<double> SetSamplingRateAsync(double newHz)
             {
                 if (_core == null) throw new InvalidOperationException("Not open");
                 bool wasStreaming = _handler != null; // se stiamo già streammando
 
-                // 1) Pausa
                 if (wasStreaming)
                 {
                     try { Stop(); } catch { /* no-op */ }
-                    await Task.Delay(50);
+                    await Task.Delay(100);   // era 50
                 }
 
-                // 2) Scrivi sampling rate (round int, come su Android/Win)
                 int sr = (int)Math.Round(newHz);
                 _core.WriteSamplingRate(sr);
-                await Task.Delay(150);
+                await Task.Delay(250);       // era 150
 
-                // 3) Reset mappa segnali e base temporale per una sessione "pulita"
-                _firstMap = true;
+                // Reset mappa e base temporale per sessione "pulita"
+                ResetIndices();
                 _tsBase = null;
+
 
                 // 4) Allinea la config corrente
                 _currentCfg.SamplingRate = sr;
@@ -521,6 +575,8 @@ namespace Com.Example.ShimmerBridge
                 _core.UICallback -= stateHandler;
                 if (final != tcs.Task) throw new InvalidOperationException("SPP connect timeout");
                 _log($"[BT] Connected to {_mac}");
+                try { _core.StopStreaming(); } catch { }
+                await Task.Delay(150);
             }
 
             public async Task ApplyConfigAsync(ShimmerConfig cfg)
@@ -546,14 +602,15 @@ namespace Com.Example.ShimmerBridge
                 {
                     int sr = (int)Math.Round(cfg.SamplingRate.Value);
                     _core.WriteSamplingRate(sr);
-                    await Task.Delay(150);
+                    await Task.Delay(250);   // era 150
                 }
 
                 _core.WriteSensors(BuildMask());
-                await Task.Delay(180);
+                await Task.Delay(350);       // era 180
 
-                _firstMap = true;
+                ResetIndices();              // reset mappa completa
                 _configured = true;
+
 
                 // salva copia dell'ultima config applicata
                 _currentCfg = new ShimmerConfig
@@ -577,11 +634,7 @@ namespace Com.Example.ShimmerBridge
             {
                 if (_core == null) throw new InvalidOperationException("Not open");
 
-                if (!_configured)
-                {
-                    try { _core.WriteSensors((int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_A_ACCEL); }
-                    catch { }
-                }
+
 
                 if (_handler != null)
                 {
@@ -589,8 +642,7 @@ namespace Com.Example.ShimmerBridge
                     _handler = null;
                 }
 
-                // reset mapping e base del tempo per sessione
-                _firstMap = true;
+                ResetIndices();
                 _tsBase = null;
 
                 _handler = (s, e) =>
@@ -603,29 +655,7 @@ namespace Com.Example.ShimmerBridge
                             var oc = ev.getObject() as ObjectCluster;
                             if (oc == null) return;
 
-                            if (_firstMap)
-                            {
-                                iTs = SafeIdx(oc, ShimmerConfiguration.SignalNames.SYSTEM_TIMESTAMP, "CAL");
-                                iLnaX = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_X, "CAL");
-                                iLnaY = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_Y, "CAL");
-                                iLnaZ = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_Z, "CAL");
-                                iWraX = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_X, "CAL");
-                                iWraY = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_Y, "CAL");
-                                iWraZ = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_Z, "CAL");
-                                iGx = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_X, "CAL");
-                                iGy = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_Y, "CAL");
-                                iGz = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_Z, "CAL");
-                                iMx = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_X, "CAL");
-                                iMy = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_Y, "CAL");
-                                iMz = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_Z, "CAL");
-                                iTemp = SafeIdx(oc, Shimmer3Configuration.SignalNames.TEMPERATURE, "CAL");
-                                iPress = SafeIdx(oc, Shimmer3Configuration.SignalNames.PRESSURE, "CAL");
-                                iVbatt = SafeIdx(oc, Shimmer3Configuration.SignalNames.V_SENSE_BATT, "CAL");
-                                iA6 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A6, "CAL");
-                                iA7 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A7, "CAL");
-                                iA15 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A15, "CAL");
-                                _firstMap = false;
-                            }
+                            RefreshMissingIndices(oc);
 
                             // timestamp relativo alla sessione
                             double? tsAbs = Val(SafeGet(oc, iTs));
