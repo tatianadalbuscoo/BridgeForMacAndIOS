@@ -111,6 +111,8 @@ namespace XR2Learn_ShimmerAPI.IMU.Android
             return (BluetoothSocket)socketObj;
         }
 
+
+
         /// <summary>Tenta la connessione con timeout; prepara gli stream su successo.</summary>
         private bool TryConnect(BluetoothSocket sock, out System.Exception? error)
         {

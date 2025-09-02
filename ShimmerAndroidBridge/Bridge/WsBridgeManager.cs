@@ -197,6 +197,18 @@ namespace Com.Example.ShimmerBridge
             }
         }
 
+        // dentro WsBridgeManager
+        private Task SendConfigSnapshot(Guid clientId, string mac)
+        {
+            if (_macSessions.TryGetValue(mac, out var sess))
+            {
+                var cfg = sess.CurrentConfig;
+                return SendJson(clientId, new { type = "config_changed", mac, cfg });
+            }
+            return Task.CompletedTask;
+        }
+
+
         private async Task HandleTextAsync(Guid clientId, string json)
         {
             using var doc = JsonDocument.Parse(json);
@@ -208,8 +220,12 @@ namespace Com.Example.ShimmerBridge
             switch (type)
             {
                 case "hello":
-                    await SendJson(clientId, new { type = "hello_ack", ok = true, proto = "shimmer.v1" });
-                    break;
+                    {
+                        await SendJson(clientId, new { type = "hello_ack", ok = true, proto = "shimmer.v1" });
+                        break;
+                    }
+
+
 
                 case "list_devices":
                     {
@@ -278,12 +294,10 @@ namespace Com.Example.ShimmerBridge
                         break;
                     }
 
-
-                // "open" vale come SUBSCRIBE (server-managed)
                 case "open":
                     {
                         string mac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
-                        if (mac.Length == 0)
+                        if (string.IsNullOrEmpty(mac))
                         {
                             await SendJson(clientId, new { type = "open_ack", ok = false, error = "no_mac" });
                             break;
@@ -291,14 +305,29 @@ namespace Com.Example.ShimmerBridge
 
                         if (_macSessions.ContainsKey(mac))
                         {
+                            // 1) iscrizione
                             Subscribe(clientId, mac);
+
+                            // 2) ACK immediato (await)
                             await SendJson(clientId, new { type = "open_ack", ok = true, mac, mode = "subscribed" });
 
-                            // ritrasmetto l'ack un paio di volte per evitare race su iOS
-                            _ = Task.Delay(250).ContinueWith(_ =>
-                                _ws?.SendAsync(clientId, JsonSerializer.Serialize(new { type = "open_ack", ok = true, mac, mode = "subscribed" })));
-                            _ = Task.Delay(800).ContinueWith(_ =>
-                                _ws?.SendAsync(clientId, JsonSerializer.Serialize(new { type = "open_ack", ok = true, mac, mode = "subscribed" })));
+                            // 3) snapshot config immediato (await)
+                            await SendConfigSnapshot(clientId, mac);
+
+                            // 4) retry "best effort" senza ContinueWith/SendAsync diretti
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    await Task.Delay(250);
+                                    await SendJson(clientId, new { type = "open_ack", ok = true, mac, mode = "subscribed" });
+                                    await SendConfigSnapshot(clientId, mac);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log?.Invoke($"open retry send error: {ex.Message}");
+                                }
+                            });
                         }
                         else
                         {
@@ -306,6 +335,8 @@ namespace Com.Example.ShimmerBridge
                         }
                         break;
                     }
+
+
 
                 case "unsubscribe":
                     {
@@ -319,20 +350,36 @@ namespace Com.Example.ShimmerBridge
                     await SendJson(clientId, new { type = "config_ack", ok = false, error = "server_managed" });
                     break;
 
-                // >>> PATCH: start accetta "mac" e sottoscrive se serve <<<
                 case "start":
                     {
                         string smac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
                         if (smac.Length > 0 && _macSessions.ContainsKey(smac))
                         {
                             Subscribe(clientId, smac);
-                            // eco anche un open_ack per i client che lo attendono
                             await SendJson(clientId, new { type = "open_ack", ok = true, mac = smac, mode = "subscribed" });
+
+                            await SendConfigSnapshot(clientId, smac);
+
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    await Task.Delay(250);
+                                    await SendJson(clientId, new { type = "open_ack", ok = true, mac = smac, mode = "subscribed" });
+                                    await SendConfigSnapshot(clientId, smac);
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log?.Invoke($"start retry send error: {ex.Message}");
+                                }
+                            });
+
                         }
 
                         await SendJson(clientId, new { type = "start_ack", ok = true, note = "server_managed" });
                         break;
                     }
+
 
                 case "stop":
                     await SendJson(clientId, new { type = "stop_ack", ok = false, error = "server_managed" });
@@ -378,23 +425,29 @@ namespace Com.Example.ShimmerBridge
             Log?.Invoke($"WS [{clientId}] unsubscribed {mac}");
         }
 
-        private Task BroadcastToSubscribers(string mac, string json)
+        private async Task BroadcastToSubscribers(string mac, string json)
         {
-            if (_ws == null) return Task.CompletedTask;
+            if (_ws == null) return;
 
             var tasks = new List<Task>();
             foreach (var kv in _subscriptions)
             {
                 var clientId = kv.Key;
                 var set = kv.Value;
-                bool send = false;
+                bool send;
                 lock (set) send = set.Contains(mac);
                 if (send)
                 {
-                    tasks.Add(_ws.SendAsync(clientId, json));
+                    tasks.Add(SafeSend(clientId, json));
                 }
             }
-            return Task.WhenAll(tasks);
+
+            try { await Task.WhenAll(tasks); }
+            catch (Exception ex)
+            {
+                // non far esplodere il chiamante se 1 client fallisce
+                Log?.Invoke($"Broadcast error: {ex.Message}");
+            }
         }
 
         private Task SendJson(Guid id, object obj)
@@ -403,7 +456,7 @@ namespace Com.Example.ShimmerBridge
             try
             {
                 string msg = JsonSerializer.Serialize(obj);
-                return _ws.SendAsync(id, msg);
+                return SafeSend(id, msg); // <— invece di _ws.SendAsync
             }
             catch (Exception ex)
             {
@@ -411,6 +464,7 @@ namespace Com.Example.ShimmerBridge
                 return Task.CompletedTask;
             }
         }
+
 
         // ====== sessione HW ======
         private sealed class SppSession : IDisposable
@@ -782,6 +836,20 @@ namespace Com.Example.ShimmerBridge
             if (m.StartsWith("00:06:66")) return true;
             return false;
         }
+        private Task SafeSend(Guid clientId, string json)
+        {
+            if (_ws == null) return Task.CompletedTask;
+            try
+            {
+                return _ws.SendAsync(clientId, json);
+            }
+            catch (Exception ex)
+            {
+                Log?.Invoke($"WS send error to {clientId}: {ex.Message}");
+                return Task.CompletedTask;
+            }
+        }
+
 
         static string GetLocalIp(Activity activity)
         {
