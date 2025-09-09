@@ -863,3 +863,4 @@ namespace Com.Example.ShimmerBridge
             Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count);
     }
 }
+

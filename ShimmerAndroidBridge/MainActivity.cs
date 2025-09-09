@@ -10,6 +10,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using STimers = System.Timers;
 using Com.Example.ShimmerBridge;
+using Android.Graphics;
+using Android.Graphics.Drawables;
 using AndroidResource = ShimmerAndroidBridge.Resource;
 
 namespace com.example.shimmerbridge.cs
@@ -20,11 +22,15 @@ namespace com.example.shimmerbridge.cs
         LinearLayout _deviceGroup = null!;
         TextView _status = null!;
         Button _btnStart = null!, _btnStop = null!;
+        Button _btnScan = null!;
 
         readonly WsBridgeManager _ws = new WsBridgeManager();
         readonly List<DeviceUi> _devices = new(); // per-device sensors + connect flag
-        // debounce per MAC
         readonly Dictionary<string, STimers.Timer> _debouncers = new(StringComparer.OrdinalIgnoreCase);
+
+        ShimmerScanManager _scanner = null!;
+        Dictionary<string, ShimmerScanManager.DeviceType> _lastTypes =
+            new(StringComparer.OrdinalIgnoreCase);
 
         const string TAG = "ShimmerBridgeUI";
 
@@ -46,8 +52,12 @@ namespace com.example.shimmerbridge.cs
                 _btnStart.Click += async (_, __) => await ConnectAndStartAsync();
                 _btnStop.Click += async (_, __) => await StopAllWithNoticeAsync();
 
+                _scanner = new ShimmerScanManager(this);
+
                 EnsureRuntimePermissions();
-                PopulateBondedDevices();
+                AddScanControls();          // bottone Scan programm.
+                PopulateBondedDevices();    // cards dei paired
+                _ = StartScanNow();         // primo scan e badge
             }
             catch (Exception ex)
             {
@@ -84,10 +94,29 @@ namespace com.example.shimmerbridge.cs
             }
         }
 
+        void AddScanControls()
+        {
+            // Riga con bottone "Refresh"
+            var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+            row.SetPadding(Dp(6), Dp(6), Dp(6), Dp(6));
+
+            _btnScan = new Button(this) { Text = "Refresh" };
+            _btnScan.Click += async (_, __) => await StartScanNow();
+
+            row.AddView(_btnScan, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent));
+
+            // Inserisco come primo child del deviceGroup
+            _deviceGroup.AddView(row, 0);
+        }
+
         void PopulateBondedDevices()
         {
+            // pulizia mantenendo la prima riga di scan (indice 0)
+            while (_deviceGroup.ChildCount > 1)
+                _deviceGroup.RemoveViewAt(1);
+
             _devices.Clear();
-            _deviceGroup.RemoveAllViews();
 
             var bt = BluetoothAdapter.DefaultAdapter;
             if (bt == null)
@@ -106,7 +135,7 @@ namespace com.example.shimmerbridge.cs
             }
 
             foreach (var d in paired
-                     .Where(d => LooksLikeShimmer(d.Name, d.Address))
+                     .Where(d => Com.Example.ShimmerBridge.ShimmerScanManager.LooksLikeShimmer(d.Name, d.Address))
                      .OrderBy(d => d.Name ?? d.Address))
             {
                 var ui = BuildDeviceCard(d);
@@ -115,23 +144,12 @@ namespace com.example.shimmerbridge.cs
             }
         }
 
-        static bool LooksLikeShimmer(string? name, string? mac)
-        {
-            string n = (name ?? "").ToUpperInvariant();
-            string m = (mac ?? "").ToUpperInvariant();
-            if (n.Contains("SHIMMER")) return true;
-            if (n.StartsWith("RNBT") || n.StartsWith("RN42") || n.StartsWith("RN-42")) return true;
-            if (m.StartsWith("00:06:66")) return true; // Microchip/Roving
-            return false;
-        }
+
 
         DeviceUi BuildDeviceCard(BluetoothDevice d)
         {
             // outer card
-            var card = new LinearLayout(this)
-            {
-                Orientation = Orientation.Vertical
-            };
+            var card = new LinearLayout(this) { Orientation = Orientation.Vertical };
             card.SetPadding(Dp(12), Dp(12), Dp(12), Dp(12));
             var lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.WrapContent)
             {
@@ -139,22 +157,55 @@ namespace com.example.shimmerbridge.cs
                 BottomMargin = Dp(8)
             };
             card.LayoutParameters = lp;
-            card.SetBackgroundColor(Android.Graphics.Color.ParseColor("#EFE9E3")); // soft beige
+            card.SetBackgroundColor(Color.ParseColor("#EFE9E3")); // soft beige
 
-            // title row: name [MAC]  +  [ ] Connect
-            var titleRow = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+            var titleRow = new LinearLayout(this)
+            {
+                Orientation = Orientation.Horizontal
+            };
+            titleRow.SetGravity(GravityFlags.CenterVertical);
+
+
             var title = new TextView(this)
             {
                 Text = $"{d.Name} [{d.Address}]",
                 TextSize = 18
             };
-            title.SetTypeface(title.Typeface, Android.Graphics.TypefaceStyle.Bold);
+            title.SetTypeface(title.Typeface, TypefaceStyle.Bold);
 
             var cbConnect = new CheckBox(this) { Text = "Connect", Checked = false };
 
+            var badge = MakeBadgeView("?");
+
+            // ordine: titolo (peso 1) -> connect -> badge (a destra)
             titleRow.AddView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
-            titleRow.AddView(cbConnect, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent));
+            titleRow.AddView(cbConnect, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent)
+            {
+                RightMargin = Dp(8)
+            });
+            titleRow.AddView(badge, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent)
+            {
+                LeftMargin = Dp(8)
+            });
+
             card.AddView(titleRow);
+
+            // EXG mode row (radio) - visibile solo se EXG
+            var exgRow = new LinearLayout(this) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
+            var lblExg = new TextView(this) { Text = "EXG mode: " };
+            lblExg.SetPadding(0, Dp(8), Dp(8), Dp(8));
+
+            var rg = new RadioGroup(this) { Orientation = Orientation.Horizontal };
+            var rbTest = new RadioButton(this) { Text = "EXG Test" };
+            var rbECG = new RadioButton(this) { Text = "ECG" };
+            var rbEMG = new RadioButton(this) { Text = "EMG" };
+            var rbResp = new RadioButton(this) { Text = "Respiration" };
+            rg.AddView(rbTest); rg.AddView(rbECG); rg.AddView(rbEMG); rg.AddView(rbResp);
+            exgRow.AddView(lblExg);
+            exgRow.AddView(rg);
+            card.AddView(exgRow);
 
             // subtitle
             var sub = new TextView(this) { Text = "Select sensors for this device" };
@@ -184,22 +235,32 @@ namespace com.example.shimmerbridge.cs
             card.AddView(a7);
             card.AddView(a15);
 
-            var ui = new DeviceUi(card, d.Name ?? "?", d.Address ?? "?", cbConnect, lnAcc, wrAcc, gyro, mag, press, batt, a6, a7, a15);
+            var ui = new DeviceUi(card, d.Name ?? "?", d.Address ?? "?", cbConnect,
+                                  lnAcc, wrAcc, gyro, mag, press, batt, a6, a7, a15,
+                                  badge, exgRow, rg);
 
-            // --- hook: quando cambi i sensori, riconfiguriamo il MAC con debounce
+            // Debounce riconfigurazione al cambio sensori (solo se connesso)
             void Hook(CheckBox cb)
             {
                 cb.CheckedChange += (s, e) =>
                 {
-                    // puoi anche rimuovere questa condizione se vuoi accettare toggles "pre-connessione"
                     if (!ui.Connect.Checked) return;
                     DebouncedReconfigure(ui.Mac, () => BuildConfigFromUi(ui));
                 };
             }
             Hook(lnAcc); Hook(wrAcc); Hook(gyro); Hook(mag); Hook(press); Hook(batt); Hook(a6); Hook(a7); Hook(a15);
 
+            // EXG mode selection (solo UI; opzionale wiring)
+            rg.CheckedChange += (s, e) =>
+            {
+                var id = rg.CheckedRadioButtonId;
+                var rb = rg.FindViewById<RadioButton>(id);
+                ui.SelectedExgMode = rb?.Text ?? "EXG Test";
+            };
+
             return ui;
         }
+
 
         // Costruisce la config corrente dai checkbox della card
         ShimmerConfig BuildConfigFromUi(DeviceUi u) => new ShimmerConfig
@@ -243,6 +304,75 @@ namespace com.example.shimmerbridge.cs
 
         int Dp(int dp) => (int)(dp * Resources.DisplayMetrics.Density + 0.5f);
 
+        async Task StartScanNow()
+        {
+            try
+            {
+                _status.Text = "Status: scanning…";
+                var res = await _scanner.ScanAsync(TimeSpan.FromSeconds(7));
+                _lastTypes = res.Visible.ToDictionary(e => e.Mac, e => e.Type, StringComparer.OrdinalIgnoreCase);
+                var offSet = new HashSet<string>(res.Off.Select(e => e.Mac), StringComparer.OrdinalIgnoreCase);
+
+                foreach (var ui in _devices)
+                {
+                    ShimmerScanManager.DeviceType type;
+                    if (_lastTypes.TryGetValue(ui.Mac, out var t))
+                        type = (t == ShimmerScanManager.DeviceType.Unknown) ? ShimmerScanManager.DeviceType.IMU : t; // euristica: Unknown -> IMU
+                    else if (offSet.Contains(ui.Mac))
+                        type = ShimmerScanManager.DeviceType.DeviceOff;
+                    else
+                        type = ShimmerScanManager.DeviceType.Unknown;
+
+                    ApplyTypeToUi(ui, type);
+                }
+
+                _status.Text = "Status: scan complete";
+            }
+            catch (Exception ex)
+            {
+                _status.Text = $"Status: scan error {ex.Message}";
+            }
+        }
+
+        void ApplyTypeToUi(DeviceUi ui, ShimmerScanManager.DeviceType type)
+        {
+            ui.Type = type;
+            SetBadge(ui.Badge, type);
+            ui.ExgRow.Visibility = type == ShimmerScanManager.DeviceType.EXG ? ViewStates.Visible : ViewStates.Gone;
+        }
+
+        TextView MakeBadgeView(string text)
+        {
+            var tv = new TextView(this) { Text = text, TextSize = 12 };
+            tv.SetTextColor(Color.White);
+            var bg = new GradientDrawable();
+            bg.SetCornerRadius(Dp(8));
+            bg.SetColor(Color.Gray);
+            tv.SetPadding(Dp(8), Dp(2), Dp(8), Dp(2));
+            tv.Background = bg;
+            return tv;
+        }
+        void SetBadge(TextView tv, ShimmerScanManager.DeviceType type)
+        {
+            var (txt, col) = type switch
+            {
+                ShimmerScanManager.DeviceType.IMU => ("IMU", Color.ParseColor("#2E7D32")),
+                ShimmerScanManager.DeviceType.EXG => ("EXG", Color.ParseColor("#1565C0")),
+                ShimmerScanManager.DeviceType.DeviceOff => ("OFF", Color.ParseColor("#757575")),
+                _ => ("?", Color.ParseColor("#EF6C00")),
+            };
+            tv.Text = txt;
+            if (tv.Background is GradientDrawable gd) gd.SetColor(col);
+            else
+            {
+                var bg = new GradientDrawable();
+                bg.SetCornerRadius(Dp(8));
+                bg.SetColor(col);
+                tv.Background = bg;
+            }
+        }
+
+
         async Task ConnectAndStartAsync()
         {
             // Collect selected devices (those with Connect checked)
@@ -262,7 +392,7 @@ namespace com.example.shimmerbridge.cs
             if (noSensor.Count > 0)
             {
                 var names = string.Join("\n", noSensor.Select(x => $"- {x.Name} [{x.Mac}]"));
-                new Android.App.AlertDialog.Builder(this)
+                new AlertDialog.Builder(this)
                     .SetTitle("No sensors selected")
                     .SetMessage($"Enable at least one sensor for:\n{names}")
                     .SetPositiveButton("OK", (s, e) => { })
@@ -393,13 +523,21 @@ namespace com.example.shimmerbridge.cs
             public CheckBox A7 { get; }
             public CheckBox A15 { get; }
 
+            public TextView Badge { get; }
+            public LinearLayout ExgRow { get; }
+            public RadioGroup ExgGroup { get; }
+            public string SelectedExgMode { get; set; } = "EXG Test";
+            public ShimmerScanManager.DeviceType Type { get; set; } = ShimmerScanManager.DeviceType.Unknown;
+
             public DeviceUi(View root, string name, string mac, CheckBox connect,
                 CheckBox ln, CheckBox wr, CheckBox gy, CheckBox mg, CheckBox pr,
-                CheckBox bt, CheckBox a6, CheckBox a7, CheckBox a15)
+                CheckBox bt, CheckBox a6, CheckBox a7, CheckBox a15,
+                TextView badge, LinearLayout exgRow, RadioGroup exgGroup)
             {
                 Root = root; Name = name; Mac = mac;
                 Connect = connect;
                 LnAcc = ln; WrAcc = wr; Gyro = gy; Mag = mg; Press = pr; Batt = bt; A6 = a6; A7 = a7; A15 = a15;
+                Badge = badge; ExgRow = exgRow; ExgGroup = exgGroup;
             }
         }
     }

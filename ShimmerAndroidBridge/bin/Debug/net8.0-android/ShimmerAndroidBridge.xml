@@ -4,6 +4,38 @@
         <name>ShimmerAndroidBridge</name>
     </assembly>
     <members>
+        <member name="T:Com.Example.ShimmerBridge.ShimmerScanManager">
+            <summary>
+            Scan manager (Bluetooth Classic) per Shimmer3.
+            - Scansiona via Classic BT
+            - Classifica EXG/IMU leggendo l’Expansion Board con micro-connessione SPP (reflection)
+            - DeviceOff = accoppiati non visti nello scan corrente
+            </summary>
+        </member>
+        <member name="M:Com.Example.ShimmerBridge.ShimmerScanManager.ScanAsync(System.TimeSpan,System.Threading.CancellationToken)">
+            <summary>
+            Avvia discovery BT classico per la durata indicata, poi classifica EXG/IMU con micro-connessioni SPP.
+            </summary>
+        </member>
+        <member name="M:Com.Example.ShimmerBridge.ShimmerScanManager.ShimmerBoardDetector.GetExpansionBoardKindAndroidAsync(System.String,System.String)">
+            <summary>
+            Connette → detect → disconnette. Restituisce (ok, kind, rawString).
+            </summary>
+        </member>
+        <member name="M:Com.Example.ShimmerBridge.ShimmerScanManager.ShimmerBoardDetector.TryDetectBoardKind(XR2Learn_ShimmerAPI.IMU.Android.ShimmerLogAndStreamAndroidBluetoothV2,Com.Example.ShimmerBridge.ShimmerScanManager.ShimmerBoardDetector.BoardKind@,System.String@)">
+            <summary>
+            Rileva la board:
+            - trova un oggetto (shim o child) che espone GetExpansionBoard()
+            - invia ReadInternalExpPower/ReadExpansionBoard
+            - polla GetExpansionBoard() (retry a metà timeout)
+            </summary>
+        </member>
+        <member name="M:Com.Example.ShimmerBridge.ShimmerScanManager.ShimmerBoardDetector.TryWaitExpansionString(System.Object,System.String@,System.Int32)">
+            Polla GetExpansionBoard() finché non ritorna una stringa non vuota; fa retry di ReadExpansionBoard a metà timeout.
+        </member>
+        <member name="M:Com.Example.ShimmerBridge.ShimmerScanManager.ShimmerBoardDetector.InvokeNoArgIfExists(System.Object,System.String)">
+            Invoca via reflection un metodo senza argomenti se esiste (public o non-public).
+        </member>
         <member name="T:XR2Learn_ShimmerAPI.IMU.Android.AndroidBluetoothConnection">
             <summary>Connessione RFCOMM SPP verso Shimmer con retry/fallback e timeout.</summary>
         </member>
