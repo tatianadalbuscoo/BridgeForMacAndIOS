@@ -195,21 +195,6 @@ namespace com.example.shimmerbridge.cs
 
             card.AddView(titleRow);
 
-            // EXG mode row (radio) - visibile solo se EXG
-            var exgRow = new LinearLayout(this) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
-            var lblExg = new TextView(this) { Text = "EXG mode: " };
-            lblExg.SetPadding(0, Dp(8), Dp(8), Dp(8));
-
-            var rg = new RadioGroup(this) { Orientation = Orientation.Horizontal };
-            var rbTest = new RadioButton(this) { Text = "EXG Test" };
-            var rbECG = new RadioButton(this) { Text = "ECG" };
-            var rbEMG = new RadioButton(this) { Text = "EMG" };
-            var rbResp = new RadioButton(this) { Text = "Respiration" };
-            rg.AddView(rbTest); rg.AddView(rbECG); rg.AddView(rbEMG); rg.AddView(rbResp);
-            exgRow.AddView(lblExg);
-            exgRow.AddView(rg);
-            card.AddView(exgRow);
-
             // subtitle
             var sub = new TextView(this) { Text = "Select sensors for this device" };
             sub.SetPadding(0, Dp(6), 0, Dp(6));
@@ -238,9 +223,36 @@ namespace com.example.shimmerbridge.cs
             card.AddView(a7);
             card.AddView(a15);
 
+            // === EXG mode (sotto Ext A15) ===
+            var exgRow = new LinearLayout(this) { Orientation = Orientation.Horizontal, Visibility = ViewStates.Gone };
+            var lblExg = new TextView(this) { Text = "EXG mode: " };
+            lblExg.SetPadding(0, Dp(8), Dp(8), Dp(8));
+
+            var rg = new RadioGroup(this) { Orientation = Orientation.Horizontal };
+
+            // Id espliciti -> uso rg.Check(...) per selezione esclusiva
+            var rbECG = new RadioButton(this) { Text = "ECG", Id = View.GenerateViewId() }; // default
+            var rbEMG = new RadioButton(this) { Text = "EMG", Id = View.GenerateViewId() };
+            var rbTest = new RadioButton(this) { Text = "EXG Test", Id = View.GenerateViewId() };
+            var rbResp = new RadioButton(this) { Text = "Respiration", Id = View.GenerateViewId() };
+
+            rg.AddView(rbECG);
+            rg.AddView(rbEMG);
+            rg.AddView(rbTest);
+            rg.AddView(rbResp);
+
+            exgRow.AddView(lblExg);
+            exgRow.AddView(rg);
+            card.AddView(exgRow);
+
             var ui = new DeviceUi(card, d.Name ?? "?", d.Address ?? "?", cbConnect,
                                   lnAcc, wrAcc, gyro, mag, press, batt, a6, a7, a15,
                                   badge, exgRow, rg);
+
+            // Default: ECG selezionato (garantisce 1 selezione attiva)
+            rg.ClearCheck();
+            rg.Check(rbECG.Id);
+            ui.SelectedExgMode = "ECG";
 
             // Debounce riconfigurazione al cambio sensori (solo se connesso)
             void Hook(CheckBox cb)
@@ -253,12 +265,12 @@ namespace com.example.shimmerbridge.cs
             }
             Hook(lnAcc); Hook(wrAcc); Hook(gyro); Hook(mag); Hook(press); Hook(batt); Hook(a6); Hook(a7); Hook(a15);
 
-            // EXG mode selection (solo UI; opzionale wiring)
+            // EXG mode selection (mutua esclusione gestita dal RadioGroup)
             rg.CheckedChange += (s, e) =>
             {
                 var id = rg.CheckedRadioButtonId;
                 var rb = rg.FindViewById<RadioButton>(id);
-                ui.SelectedExgMode = rb?.Text ?? "EXG Test";
+                ui.SelectedExgMode = rb?.Text ?? "ECG";
             };
 
             return ui;
@@ -559,7 +571,8 @@ namespace com.example.shimmerbridge.cs
             public TextView Badge { get; }
             public LinearLayout ExgRow { get; }
             public RadioGroup ExgGroup { get; }
-            public string SelectedExgMode { get; set; } = "EXG Test";
+            public string SelectedExgMode { get; set; } = "ECG";
+
             public ShimmerScanManager.DeviceType Type { get; set; } = ShimmerScanManager.DeviceType.Unknown;
 
             public DeviceUi(View root, string name, string mac, CheckBox connect,
