@@ -3,12 +3,12 @@
   "WorkspaceRootPath": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|c:\\scuola\\master\\1 progetto di semestre\\shimmergsr-main\\shimmerandroidbridge\\shimmerandroidbridge\\bridge\\shimmerscanmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|solutionrelative:shimmerandroidbridge\\bridge\\shimmerscanmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|c:\\scuola\\master\\1 progetto di semestre\\shimmergsr-main\\shimmerandroidbridge\\shimmerandroidbridge\\mainactivity.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|solutionrelative:shimmerandroidbridge\\mainactivity.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|c:\\scuola\\master\\1 progetto di semestre\\shimmergsr-main\\shimmerandroidbridge\\shimmerandroidbridge\\bridge\\shimmerscanmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|solutionrelative:shimmerandroidbridge\\bridge\\shimmerscanmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}|ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj|c:\\scuola\\master\\1 progetto di semestre\\shimmergsr-main\\shimmerandroidbridge\\shimmerandroidbridge\\bridge\\wsbridgemanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -30,7 +30,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 4,
+          "SelectedChildIndex": 6,
           "Children": [
             {
               "$type": "Bookmark",
@@ -50,13 +50,13 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "ShimmerScanManager.cs",
               "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Bridge\\ShimmerScanManager.cs",
               "RelativeDocumentMoniker": "ShimmerAndroidBridge\\Bridge\\ShimmerScanManager.cs",
               "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Bridge\\ShimmerScanManager.cs",
               "RelativeToolTip": "ShimmerAndroidBridge\\Bridge\\ShimmerScanManager.cs",
-              "ViewState": "AQIAAL8BAAAAAAAAAAAmwNQBAAAAAAAA",
+              "ViewState": "AQIAAK8BAAAAAAAAAAAcwLwBAABaAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-09-09T22:23:11.561Z",
               "EditorCaption": ""
@@ -64,25 +64,24 @@
             {
               "$type": "Document",
               "DocumentIndex": 3,
-              "Title": "ShimmerAndroidBridge",
+              "Title": "ShimmerAndroidBridge.csproj",
               "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj",
               "RelativeDocumentMoniker": "ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj",
               "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj",
               "RelativeToolTip": "ShimmerAndroidBridge\\ShimmerAndroidBridge.csproj",
               "ViewState": "AQIAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2025-09-09T22:10:29.763Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-09T22:10:29.763Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "MainActivity.cs",
               "DocumentMoniker": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\MainActivity.cs",
               "RelativeDocumentMoniker": "ShimmerAndroidBridge\\MainActivity.cs",
               "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\MainActivity.cs",
               "RelativeToolTip": "ShimmerAndroidBridge\\MainActivity.cs",
-              "ViewState": "AQIAAJQAAAAAAAAAAAA+wKYAAAAAAAAA",
+              "ViewState": "AQIAAA4CAAAAAAAAAAAIwEECAAAAAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-09-09T21:00:00.895Z",
               "EditorCaption": ""
@@ -97,8 +96,7 @@
               "RelativeToolTip": "ShimmerAndroidBridge\\Bridge\\WsBridgeManager.cs",
               "ViewState": "AQIAAE0DAAAAAAAAAAAcwGIDAAAAAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-08-26T08:33:35.474Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-08-26T08:33:35.474Z"
             },
             {
               "$type": "Document",
@@ -109,8 +107,7 @@
               "ToolTip": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAndroidBridge\\Resources\\layout\\activity_main.axml",
               "RelativeToolTip": "ShimmerAndroidBridge\\Resources\\layout\\activity_main.axml",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-09T20:38:40.229Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-09T20:38:40.229Z"
             }
           ]
         }

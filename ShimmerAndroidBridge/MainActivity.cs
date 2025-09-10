@@ -34,6 +34,9 @@ namespace com.example.shimmerbridge.cs
 
         const string TAG = "ShimmerBridgeUI";
 
+        volatile bool _isScanning = false;
+        AlertDialog? _scanDialog = null;
+
         protected override void OnCreate(Bundle? savedInstanceState)
         {
             base.OnCreate(savedInstanceState);
@@ -55,7 +58,7 @@ namespace com.example.shimmerbridge.cs
                 _scanner = new ShimmerScanManager(this);
 
                 EnsureRuntimePermissions();
-                AddScanControls();          // bottone Scan programm.
+                AddScanControls();          // bottone Refresh
                 PopulateBondedDevices();    // cards dei paired
                 _ = StartScanNow();         // primo scan e badge
             }
@@ -96,8 +99,11 @@ namespace com.example.shimmerbridge.cs
 
         void AddScanControls()
         {
-            // Riga con bottone "Refresh"
-            var row = new LinearLayout(this) { Orientation = Orientation.Horizontal };
+            // Riga con bottone "Refresh" (niente rotellina qui)
+            var row = new LinearLayout(this)
+            {
+                Orientation = Orientation.Horizontal
+            };
             row.SetPadding(Dp(6), Dp(6), Dp(6), Dp(6));
 
             _btnScan = new Button(this) { Text = "Refresh" };
@@ -144,8 +150,6 @@ namespace com.example.shimmerbridge.cs
             }
         }
 
-
-
         DeviceUi BuildDeviceCard(BluetoothDevice d)
         {
             // outer card
@@ -159,12 +163,12 @@ namespace com.example.shimmerbridge.cs
             card.LayoutParameters = lp;
             card.SetBackgroundColor(Color.ParseColor("#EFE9E3")); // soft beige
 
+            // title row: titolo (peso 1) -> connect -> badge (a destra)
             var titleRow = new LinearLayout(this)
             {
                 Orientation = Orientation.Horizontal
             };
             titleRow.SetGravity(GravityFlags.CenterVertical);
-
 
             var title = new TextView(this)
             {
@@ -177,7 +181,6 @@ namespace com.example.shimmerbridge.cs
 
             var badge = MakeBadgeView("?");
 
-            // ordine: titolo (peso 1) -> connect -> badge (a destra)
             titleRow.AddView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1f));
             titleRow.AddView(cbConnect, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent)
@@ -261,7 +264,6 @@ namespace com.example.shimmerbridge.cs
             return ui;
         }
 
-
         // Costruisce la config corrente dai checkbox della card
         ShimmerConfig BuildConfigFromUi(DeviceUi u) => new ShimmerConfig
         {
@@ -304,12 +306,37 @@ namespace com.example.shimmerbridge.cs
 
         int Dp(int dp) => (int)(dp * Resources.DisplayMetrics.Density + 0.5f);
 
+        // ===== Avviso modale con rotella =====
+        void ShowScanDialog(string title = "Scanning…")
+        {
+            try { _scanDialog?.Dismiss(); } catch { }
+            var pb = new ProgressBar(this) { Indeterminate = true };
+            _scanDialog = new AlertDialog.Builder(this)
+                .SetTitle(title)
+                .SetView(pb)
+                .SetCancelable(false)
+                .Create();
+            _scanDialog.Show();
+        }
+        void HideScanDialog()
+        {
+            try { _scanDialog?.Dismiss(); } catch { }
+            _scanDialog = null;
+        }
+
         async Task StartScanNow()
         {
+            if (_isScanning) return; // evita doppi tap
+            _isScanning = true;
+
             try
             {
+                _btnScan.Enabled = false;
+                ShowScanDialog("Scanning devices…");
+
                 _status.Text = "Status: scanning…";
                 var res = await _scanner.ScanAsync(TimeSpan.FromSeconds(7));
+
                 _lastTypes = res.Visible.ToDictionary(e => e.Mac, e => e.Type, StringComparer.OrdinalIgnoreCase);
                 var offSet = new HashSet<string>(res.Off.Select(e => e.Mac), StringComparer.OrdinalIgnoreCase);
 
@@ -317,7 +344,7 @@ namespace com.example.shimmerbridge.cs
                 {
                     ShimmerScanManager.DeviceType type;
                     if (_lastTypes.TryGetValue(ui.Mac, out var t))
-                        type = (t == ShimmerScanManager.DeviceType.Unknown) ? ShimmerScanManager.DeviceType.IMU : t; // euristica: Unknown -> IMU
+                        type = t; // mantieni il risultato reale (IMU/EXG/Unknown)
                     else if (offSet.Contains(ui.Mac))
                         type = ShimmerScanManager.DeviceType.DeviceOff;
                     else
@@ -331,6 +358,12 @@ namespace com.example.shimmerbridge.cs
             catch (Exception ex)
             {
                 _status.Text = $"Status: scan error {ex.Message}";
+            }
+            finally
+            {
+                HideScanDialog();
+                _btnScan.Enabled = true;
+                _isScanning = false;
             }
         }
 
@@ -352,6 +385,7 @@ namespace com.example.shimmerbridge.cs
             tv.Background = bg;
             return tv;
         }
+
         void SetBadge(TextView tv, ShimmerScanManager.DeviceType type)
         {
             var (txt, col) = type switch
@@ -371,7 +405,6 @@ namespace com.example.shimmerbridge.cs
                 tv.Background = bg;
             }
         }
-
 
         async Task ConnectAndStartAsync()
         {
