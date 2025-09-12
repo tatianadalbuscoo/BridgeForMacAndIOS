@@ -28,6 +28,11 @@ namespace Com.Example.ShimmerBridge
         public bool EnableExtA7 { get; set; }
         public bool EnableExtA15 { get; set; }
         public double? SamplingRate { get; set; }
+
+        // --- EXG (NUOVO) ---
+        public bool EnableExg1 { get; set; }   // EXG1 CH1/CH2
+        public bool EnableExg2 { get; set; }   // EXG2 CH1/CH2
+        public bool ExgUse16Bit { get; set; }  // false -> 24-bit (default)
     }
 
     public sealed class WsBridgeManager : IDisposable
@@ -50,7 +55,9 @@ namespace Com.Example.ShimmerBridge
         public static bool AnySensorEnabled(ShimmerConfig c) =>
             c.EnableLowNoiseAccelerometer || c.EnableWideRangeAccelerometer || c.EnableGyroscope ||
             c.EnableMagnetometer || c.EnablePressureTemperature || c.EnableBattery ||
-            c.EnableExtA6 || c.EnableExtA7 || c.EnableExtA15;
+            c.EnableExtA6 || c.EnableExtA7 || c.EnableExtA15 ||
+            // --- EXG (NUOVO) ---
+            c.EnableExg1 || c.EnableExg2;
 
         public Task StartAsync(Activity activity, int port = 8787)
         {
@@ -486,7 +493,9 @@ namespace Com.Example.ShimmerBridge
                 iGx = -1, iGy = -1, iGz = -1,
                 iMx = -1, iMy = -1, iMz = -1,
                 iTemp = -1, iPress = -1, iVbatt = -1,
-                iA6 = -1, iA7 = -1, iA15 = -1;
+                iA6 = -1, iA7 = -1, iA15 = -1,
+                // --- EXG (NUOVO) ---
+                iExg1Ch1 = -1, iExg1Ch2 = -1, iExg2Ch1 = -1, iExg2Ch2 = -1;
 
             // memorizza ultima config applicata
             ShimmerConfig _currentCfg = new ShimmerConfig();
@@ -501,7 +510,11 @@ namespace Com.Example.ShimmerBridge
                 EnableExtA6 = _currentCfg.EnableExtA6,
                 EnableExtA7 = _currentCfg.EnableExtA7,
                 EnableExtA15 = _currentCfg.EnableExtA15,
-                SamplingRate = _currentCfg.SamplingRate
+                SamplingRate = _currentCfg.SamplingRate,
+                // --- EXG (NUOVO) ---
+                EnableExg1 = _currentCfg.EnableExg1,
+                EnableExg2 = _currentCfg.EnableExg2,
+                ExgUse16Bit = _currentCfg.ExgUse16Bit
             };
 
             // === AGGIUNGERE in SppSession (ad es. subito dopo i campi iTs, iLnaX... ===
@@ -514,6 +527,8 @@ namespace Com.Example.ShimmerBridge
                 iMx = iMy = iMz = -1;
                 iTemp = iPress = iVbatt = -1;
                 iA6 = iA7 = iA15 = -1;
+                // --- EXG (NUOVO) ---
+                iExg1Ch1 = iExg1Ch2 = iExg2Ch1 = iExg2Ch2 = -1;
             }
 
             void RefreshMissingIndices(ObjectCluster oc)
@@ -556,6 +571,28 @@ namespace Com.Example.ShimmerBridge
                 if (_currentCfg.EnableExtA6 && iA6 == -1) iA6 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A6, "CAL");
                 if (_currentCfg.EnableExtA7 && iA7 == -1) iA7 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A7, "CAL");
                 if (_currentCfg.EnableExtA15 && iA15 == -1) iA15 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A15, "CAL");
+
+                // --- EXG (NUOVO): prova più alias per compatibilità ---
+                if (_currentCfg.EnableExg1)
+                {
+                    if (iExg1Ch1 == -1) iExg1Ch1 = TryIdx(oc,
+                        ("EXG1 CH1", "CAL"), ("EXG1_CH1", "CAL"), ("EXG CH1", "CAL"),
+                        ("ECG LA-RA", "CAL"), ("EMG CH1", "CAL"),
+                        ("EXG1 CH1", "RAW"));
+                    if (iExg1Ch2 == -1) iExg1Ch2 = TryIdx(oc,
+                        ("EXG1 CH2", "CAL"), ("EXG1_CH2", "CAL"), ("EXG CH2", "CAL"),
+                        ("ECG LL-LA", "CAL"), ("EMG CH2", "CAL"),
+                        ("EXG1 CH2", "RAW"));
+                }
+                if (_currentCfg.EnableExg2)
+                {
+                    if (iExg2Ch1 == -1) iExg2Ch1 = TryIdx(oc,
+                        ("EXG2 CH1", "CAL"), ("EXG2_CH1", "CAL"), ("EXG CH3", "CAL"),
+                        ("EXG2 CH1", "RAW"));
+                    if (iExg2Ch2 == -1) iExg2Ch2 = TryIdx(oc,
+                        ("EXG2 CH2", "CAL"), ("EXG2_CH2", "CAL"), ("EXG CH4", "CAL"),
+                        ("EXG2 CH2", "RAW"));
+                }
             }
 
 
@@ -637,6 +674,24 @@ namespace Com.Example.ShimmerBridge
             {
                 if (_core == null) throw new InvalidOperationException("Not open");
 
+                // --- AGGIUNTA: auto-abilita EXG1+EXG2 se la board è EXG e l'utente non li ha già abilitati ---
+                try
+                {
+                    if (!cfg.EnableExg1 && !cfg.EnableExg2)
+                    {
+                        if (ShimmerScanManager.ShimmerBoardDetector.TryDetectBoardKind(
+                                _core, out var kind, out var rawId) &&
+                            kind == ShimmerScanManager.ShimmerBoardDetector.BoardKind.EXG)
+                        {
+                            cfg.EnableExg1 = true;
+                            cfg.EnableExg2 = true;
+                            cfg.ExgUse16Bit = false; // 24-bit default (come ShimmerApp)
+                            _log($"[CFG] EXG board detected ({rawId}), enabling EXG1+EXG2 @24-bit");
+                        }
+                    }
+                }
+                catch { /* non bloccare la config se detection fallisce */ }
+
                 int BuildMask()
                 {
                     int mask = 0;
@@ -649,6 +704,17 @@ namespace Com.Example.ShimmerBridge
                     if (cfg.EnableExtA6) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A6;
                     if (cfg.EnableExtA7) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A7;
                     if (cfg.EnableExtA15) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A15;
+
+                    // --- EXG (NUOVO) ---
+                    if (cfg.EnableExg1)
+                        mask |= cfg.ExgUse16Bit
+                            ? (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG1_16BIT
+                            : (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG1_24BIT;
+                    if (cfg.EnableExg2)
+                        mask |= cfg.ExgUse16Bit
+                            ? (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG2_16BIT
+                            : (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG2_24BIT;
+
                     return mask;
                 }
 
@@ -665,7 +731,6 @@ namespace Com.Example.ShimmerBridge
                 ResetIndices();              // reset mappa completa
                 _configured = true;
 
-
                 // salva copia dell'ultima config applicata
                 _currentCfg = new ShimmerConfig
                 {
@@ -678,7 +743,11 @@ namespace Com.Example.ShimmerBridge
                     EnableExtA6 = cfg.EnableExtA6,
                     EnableExtA7 = cfg.EnableExtA7,
                     EnableExtA15 = cfg.EnableExtA15,
-                    SamplingRate = cfg.SamplingRate
+                    SamplingRate = cfg.SamplingRate,
+                    // --- EXG (NUOVO) ---
+                    EnableExg1 = cfg.EnableExg1,
+                    EnableExg2 = cfg.EnableExg2,
+                    ExgUse16Bit = cfg.ExgUse16Bit
                 };
 
                 _log($"[CFG] applied");
@@ -740,6 +809,12 @@ namespace Com.Example.ShimmerBridge
                             double? a7 = Val(SafeGet(oc, iA7));
                             double? a15 = Val(SafeGet(oc, iA15));
 
+                            // --- EXG (NUOVO) ---
+                            double? exg1ch1 = Val(SafeGet(oc, iExg1Ch1));
+                            double? exg1ch2 = Val(SafeGet(oc, iExg1Ch2));
+                            double? exg2ch1 = Val(SafeGet(oc, iExg2Ch1));
+                            double? exg2ch2 = Val(SafeGet(oc, iExg2Ch2));
+
                             // payload dinamico: includo SOLO i sensori abilitati nella config corrente
                             var map = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
                             {
@@ -775,6 +850,30 @@ namespace Com.Example.ShimmerBridge
                                     _currentCfg.EnableExtA7 ? a7 : 0.0,
                                     _currentCfg.EnableExtA15 ? a15 : 0.0
                                 );
+
+                            // --- EXG nel JSON: blocchi strutturati + compatibilità con VM MAUI (ExgCh1/ExgCh2) ---
+                            // Pubblica solo se arrivano davvero i canali EXG
+                            bool hasExg1 = exg1ch1.HasValue || exg1ch2.HasValue;
+                            bool hasExg2 = exg2ch1.HasValue || exg2ch2.HasValue;
+
+                            if (hasExg1)
+                            {
+                                map["exg1"] = new { ch1 = exg1ch1 ?? 0.0, ch2 = exg1ch2 ?? 0.0 };
+                                map["ExgCh1"] = exg1ch1 ?? 0.0;  // compat con VM
+                                map["ExgCh2"] = exg1ch2 ?? 0.0;
+                            }
+                            else if (!hasExg1 && hasExg2)
+                            {
+                                // se solo EXG2 dà dati, esponi anche i flat per compat
+                                map["exg2"] = new { ch1 = exg2ch1 ?? 0.0, ch2 = exg2ch2 ?? 0.0 };
+                                map["ExgCh1"] = exg2ch1 ?? 0.0;
+                                map["ExgCh2"] = exg2ch2 ?? 0.0;
+                            }
+                            else if (hasExg2)
+                            {
+                                map["exg2"] = new { ch1 = exg2ch1 ?? 0.0, ch2 = exg2ch2 ?? 0.0 };
+                            }
+                            // (se nessuno ha valori, non aggiungiamo proprio le chiavi EXG)
 
                             _broadcast(_mac, JsonSerializer.Serialize(map));
                         }
@@ -823,6 +922,17 @@ namespace Com.Example.ShimmerBridge
                     return s.IndexOf("CONNECTED", StringComparison.OrdinalIgnoreCase) >= 0;
                 }
                 catch { return false; }
+            }
+
+            // --- helper EXG (NUOVO): prova più alias dei label ---
+            static int TryIdx(ObjectCluster oc, params (string name, string fmt)[] cands)
+            {
+                foreach (var (n, f) in cands)
+                {
+                    int i = SafeIdx(oc, n, f);
+                    if (i >= 0) return i;
+                }
+                return -1;
             }
         }
 
