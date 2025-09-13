@@ -231,7 +231,7 @@ namespace com.example.shimmerbridge.cs
             var rg = new RadioGroup(this) { Orientation = Orientation.Horizontal };
 
             // Id espliciti -> uso rg.Check(...) per selezione esclusiva
-            var rbECG = new RadioButton(this) { Text = "ECG", Id = View.GenerateViewId() }; // default
+            var rbECG = new RadioButton(this) { Text = "ECG", Id = View.GenerateViewId() };
             var rbEMG = new RadioButton(this) { Text = "EMG", Id = View.GenerateViewId() };
             var rbTest = new RadioButton(this) { Text = "EXG Test", Id = View.GenerateViewId() };
             var rbResp = new RadioButton(this) { Text = "Respiration", Id = View.GenerateViewId() };
@@ -249,8 +249,7 @@ namespace com.example.shimmerbridge.cs
                                   lnAcc, wrAcc, gyro, mag, press, batt, a6, a7, a15,
                                   badge, exgRow, rg);
 
-            // Default: ECG selezionato (garantisce 1 selezione attiva)
-            rg.ClearCheck();
+            // ✅ Default all’avvio: ECG selezionato (utente può cambiare dopo)
             rg.Check(rbECG.Id);
             ui.SelectedExgMode = "ECG";
 
@@ -276,7 +275,7 @@ namespace com.example.shimmerbridge.cs
             return ui;
         }
 
-        // Costruisce la config corrente dai checkbox della card
+        // Costruisce la config corrente dai checkbox della card  (⚠️ non tocchiamo IMU)
         ShimmerConfig BuildConfigFromUi(DeviceUi u) => new ShimmerConfig
         {
             EnableLowNoiseAccelerometer = u.LnAcc.Checked,
@@ -289,6 +288,7 @@ namespace com.example.shimmerbridge.cs
             EnableExtA7 = u.A7.Checked,
             EnableExtA15 = u.A15.Checked,
             SamplingRate = null // opzionale: aggancia qui un controllo SR se lo aggiungi in UI
+            // ExgMode: impostato più avanti SOLO per device EXG
         };
 
         // Debounce lato UI per non tempestare il server mentre l’utente clicca più caselle
@@ -446,8 +446,20 @@ namespace com.example.shimmerbridge.cs
                 return;
             }
 
-            // Build configs
-            var targets = selected.Select(x => (x, Cfg: BuildConfigFromUi(x))).ToList();
+            // Build configs (⚠️ ExgMode impostato solo per device EXG)
+            var targets = selected.Select(x =>
+            {
+                var cfg = BuildConfigFromUi(x);
+
+                if (x.Type == ShimmerScanManager.DeviceType.EXG)
+                {
+                    var wire = UiModeToWire(x.SelectedExgMode);
+                    cfg.ExgModeWire = wire; // salva la scelta utente (server poi la stampa)
+                    Android.Util.Log.Info(TAG, $"[UI] {x.Name} [{x.Mac}] exg_mode (wire)='{wire}'");
+                }
+
+                return (x, Cfg: cfg);
+            }).ToList();
 
             // Start WS server
             await _ws.StartAsync(this, 8787);
@@ -549,6 +561,16 @@ namespace com.example.shimmerbridge.cs
 
             await _ws.StopAsync(); // closes WS & all sessions
         }
+
+        // -- mapping UI → wire string usata dal server
+        static string UiModeToWire(string s) => (s ?? "").Trim().ToLowerInvariant() switch
+        {
+            "ecg" => "ecg",
+            "emg" => "emg",
+            "exg test" => "test",
+            "respiration" => "resp",
+            _ => "ecg" // sicurezza: se qualcosa va storto, parti da ECG
+        };
 
         sealed class DeviceUi
         {

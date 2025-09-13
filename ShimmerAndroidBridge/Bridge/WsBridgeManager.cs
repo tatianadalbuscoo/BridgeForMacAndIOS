@@ -10,14 +10,20 @@ using Android.Bluetooth;
 using Android.Net.Wifi;
 using WatsonWebsocket;
 using XR2Learn_ShimmerAPI.IMU.Android;
+using XR2Learn_ShimmerAPI; // for ShimmerScanManager
 using ShimmerAPI;
 using Activity = Android.App.Activity;
+using System.Text.Json.Serialization;
 
 namespace Com.Example.ShimmerBridge
 {
+    // Modalità EXG (se vuoi distinguere UI lato client)
+    public enum ExgMode { None, ECG, EMG, ExgTest, Respiration }
+
     // Config sensori (SR opzionale)
     public sealed class ShimmerConfig
     {
+        // IMU flags
         public bool EnableLowNoiseAccelerometer { get; set; }
         public bool EnableWideRangeAccelerometer { get; set; }
         public bool EnableGyroscope { get; set; }
@@ -27,12 +33,47 @@ namespace Com.Example.ShimmerBridge
         public bool EnableExtA6 { get; set; }
         public bool EnableExtA7 { get; set; }
         public bool EnableExtA15 { get; set; }
+
         public double? SamplingRate { get; set; }
 
-        // --- EXG (NUOVO) ---
+        // --- EXG ---
         public bool EnableExg1 { get; set; }   // EXG1 CH1/CH2
         public bool EnableExg2 { get; set; }   // EXG2 CH1/CH2
         public bool ExgUse16Bit { get; set; }  // false -> 24-bit (default)
+
+        [JsonIgnore] // <-- evita serializzazione numerica del campo enum
+        public ExgMode ExgMode { get; set; } = ExgMode.None;
+
+        // wire name <-> enum (nessun default)
+        [JsonPropertyName("exg_mode")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ExgModeWire
+        {
+            get => ExgMode switch
+            {
+                ExgMode.ECG => "ecg",
+                ExgMode.EMG => "emg",
+                ExgMode.ExgTest => "test",
+                ExgMode.Respiration => "resp",
+                _ => (string?)null
+            };
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    ExgMode = ExgMode.None;
+                    return;
+                }
+                ExgMode = value.Trim().ToLowerInvariant() switch
+                {
+                    "ecg" => ExgMode.ECG,
+                    "emg" => ExgMode.EMG,
+                    "test" or "exgtest" or "exg_test" => ExgMode.ExgTest,
+                    "resp" or "respiration" => ExgMode.Respiration,
+                    _ => ExgMode.None
+                };
+            }
+        }
     }
 
     public sealed class WsBridgeManager : IDisposable
@@ -51,13 +92,13 @@ namespace Com.Example.ShimmerBridge
         public bool IsRunning => _ws?.IsListening ?? false;
         public int ActiveSessionCount => _macSessions.Count;
 
-        // --- helper pubblico: almeno un sensore attivo
+        // Stream se almeno un sensore è attivo (EXG o IMU)
         public static bool AnySensorEnabled(ShimmerConfig c) =>
-            c.EnableLowNoiseAccelerometer || c.EnableWideRangeAccelerometer || c.EnableGyroscope ||
-            c.EnableMagnetometer || c.EnablePressureTemperature || c.EnableBattery ||
-            c.EnableExtA6 || c.EnableExtA7 || c.EnableExtA15 ||
-            // --- EXG (NUOVO) ---
-            c.EnableExg1 || c.EnableExg2;
+            c.EnableExg1 || c.EnableExg2 ||
+            c.EnableLowNoiseAccelerometer || c.EnableWideRangeAccelerometer ||
+            c.EnableGyroscope || c.EnableMagnetometer ||
+            c.EnablePressureTemperature || c.EnableBattery ||
+            c.EnableExtA6 || c.EnableExtA7 || c.EnableExtA15;
 
         public Task StartAsync(Activity activity, int port = 8787)
         {
@@ -117,17 +158,24 @@ namespace Com.Example.ShimmerBridge
                 log: msg => Log?.Invoke(msg)
             );
 
-            await sess.OpenAsync();
-            await sess.ApplyConfigAsync(cfg);
-            if (AnySensorEnabled(cfg)) sess.Start(); // parte solo se c'è almeno un sensore
+            // logga PRIMA di applicare (scelta utente)
+            Log?.Invoke($"[SERVER] requested exg_mode (wire)='{cfg.ExgModeWire ?? "null"}' enum={cfg.ExgMode}");
 
+            await sess.OpenAsync();
+            await sess.ApplyConfigAsync(cfg);   // auto-config IMU/EXG secondo board
+
+            // logga DOPO l'applicazione (effettiva)
+            var applied = sess.CurrentConfig;
+            Log?.Invoke($"[SERVER] applied   exg_mode (wire)='{applied.ExgModeWire ?? "null"}' enum={applied.ExgMode}");
+
+            if (AnySensorEnabled(cfg)) sess.Start();
+
+            sess.LockMode();
             _macSessions[mac] = sess;
 
-            // broadcast iniziale della config verso i subscriber (se già presenti)
-            var initMsg = new { type = "config_changed", mac, cfg };
-            await BroadcastToSubscribers(mac, JsonSerializer.Serialize(initMsg));
-
-            Log?.Invoke($"[SERVER] Session started for {mac}");
+            // broadcast iniziale della config effettiva (include exg_mode)
+            await BroadcastToSubscribers(mac, JsonSerializer.Serialize(
+                new { type = "config_changed", mac, cfg = sess.CurrentConfig }));
         }
 
         // === Update live della configurazione sensori per un MAC attivo
@@ -138,23 +186,58 @@ namespace Com.Example.ShimmerBridge
 
             if (_macSessions.TryGetValue(mac, out var sess))
             {
+                Log?.Invoke($"[SERVER] update requested exg_mode (wire)='{cfg.ExgModeWire ?? "null"}' enum={cfg.ExgMode} (mode lock={sess.IsModeLocked})");
+
+                // non permettere di toccare ExgMode dopo il connect
+                cfg.ExgMode = sess.CurrentConfig.ExgMode;
+
                 try { sess.Stop(); } catch { }
                 await sess.ApplyConfigAsync(cfg);
 
-                if (AnySensorEnabled(cfg))
-                {
-                    sess.Start(); // riavvia solo se ci sono sensori attivi
-                }
+                var applied2 = sess.CurrentConfig;
+                Log?.Invoke($"[SERVER] update applied  exg_mode (wire)='{applied2.ExgModeWire ?? "null"}' enum={applied2.ExgMode}");
 
-                var msg = new { type = "config_changed", mac, cfg };
+                if (AnySensorEnabled(cfg)) sess.Start();
+
+                // manda la config effettivamente applicata (include exg_mode)
+                var msg = new { type = "config_changed", mac, cfg = sess.CurrentConfig };
                 await BroadcastToSubscribers(mac, JsonSerializer.Serialize(msg));
 
-                Log?.Invoke($"[SERVER] Reconfigured {mac}");
+                Log?.Invoke($"[SERVER] Reconfigured {mac} (mode locked)");
             }
             else
             {
                 Log?.Invoke($"[SERVER] UpdateConfig ignored: session not found for {mac}");
             }
+        }
+
+        public async Task<bool> SetExgModeAsync(string mac, string mode)
+        {
+            mac = (mac ?? "").Trim();
+            if (mac.Length == 0) return false;
+
+            if (_macSessions.TryGetValue(mac, out var sess))
+            {
+                var m = (mode ?? "").Trim().ToLowerInvariant();
+                ExgMode em = m switch
+                {
+                    "ecg" => ExgMode.ECG,
+                    "emg" => ExgMode.EMG,
+                    "test" or "exgtest" or "exg_test" => ExgMode.ExgTest,
+                    "resp" or "respiration" => ExgMode.Respiration,
+                    _ => sess.CurrentConfig.ExgMode
+                };
+
+                bool ok = await sess.SetExgModeAsync(em); // viene ignorato se la sessione è "mode locked"
+                if (ok)
+                {
+                    var cfg = sess.CurrentConfig;
+                    await BroadcastToSubscribers(mac, System.Text.Json.JsonSerializer.Serialize(
+                        new { type = "config_changed", mac, cfg }));
+                }
+                return ok;
+            }
+            return false;
         }
 
         // === chiusura di una singola sessione
@@ -204,7 +287,6 @@ namespace Com.Example.ShimmerBridge
             }
         }
 
-        // dentro WsBridgeManager
         private Task SendConfigSnapshot(Guid clientId, string mac)
         {
             if (_macSessions.TryGetValue(mac, out var sess))
@@ -214,7 +296,6 @@ namespace Com.Example.ShimmerBridge
             }
             return Task.CompletedTask;
         }
-
 
         private async Task HandleTextAsync(Guid clientId, string json)
         {
@@ -231,8 +312,6 @@ namespace Com.Example.ShimmerBridge
                         await SendJson(clientId, new { type = "hello_ack", ok = true, proto = "shimmer.v1" });
                         break;
                     }
-
-
 
                 case "list_devices":
                     {
@@ -251,7 +330,12 @@ namespace Com.Example.ShimmerBridge
                         break;
                     }
 
-                // restituisce la config corrente per un MAC
+                case "set_exg_mode":
+                    {
+                        await SendJson(clientId, new { type = "set_exg_mode_ack", ok = false, error = "server_managed" });
+                        break;
+                    }
+
                 case "get_config":
                     {
                         string mac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
@@ -261,13 +345,9 @@ namespace Com.Example.ShimmerBridge
                             break;
                         }
                         if (TryGetConfig(mac, out var cfg))
-                        {
                             await SendJson(clientId, new { type = "config", ok = true, mac, cfg });
-                        }
                         else
-                        {
                             await SendJson(clientId, new { type = "config", ok = false, mac, error = "not_active" });
-                        }
                         break;
                     }
 
@@ -290,7 +370,7 @@ namespace Com.Example.ShimmerBridge
                             // ACK puntuale al chiamante
                             await SendJson(clientId, new { type = "set_sampling_rate_ack", ok = true, mac, requested = sr, applied });
 
-                            // broadcast per chi è sottoscritto a quel MAC (invia anche la config con SR aggiornato)
+                            // broadcast per i subscriber (config aggiornata)
                             var cfg = sess.CurrentConfig;
                             await BroadcastToSubscribers(mac, JsonSerializer.Serialize(new { type = "config_changed", mac, cfg }));
                         }
@@ -304,36 +384,27 @@ namespace Com.Example.ShimmerBridge
                 case "open":
                     {
                         string mac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
+
                         if (string.IsNullOrEmpty(mac))
                         {
                             await SendJson(clientId, new { type = "open_ack", ok = false, error = "no_mac" });
                             break;
                         }
 
-                        if (_macSessions.ContainsKey(mac))
+                        if (_macSessions.TryGetValue(mac, out var sess))
                         {
-                            // 1) iscrizione
                             Subscribe(clientId, mac);
-
-                            // 2) ACK immediato (await)
                             await SendJson(clientId, new { type = "open_ack", ok = true, mac, mode = "subscribed" });
-
-                            // 3) snapshot config immediato (await)
                             await SendConfigSnapshot(clientId, mac);
 
-                            // 4) retry "best effort" senza ContinueWith/SendAsync diretti
-                            _ = Task.Run(async () =>
-                            {
+                            _ = Task.Run(async () => {
                                 try
                                 {
                                     await Task.Delay(250);
                                     await SendJson(clientId, new { type = "open_ack", ok = true, mac, mode = "subscribed" });
                                     await SendConfigSnapshot(clientId, mac);
                                 }
-                                catch (Exception ex)
-                                {
-                                    Log?.Invoke($"open retry send error: {ex.Message}");
-                                }
+                                catch (Exception ex) { Log?.Invoke($"open retry send error: {ex.Message}"); }
                             });
                         }
                         else
@@ -342,8 +413,6 @@ namespace Com.Example.ShimmerBridge
                         }
                         break;
                     }
-
-
 
                 case "unsubscribe":
                     {
@@ -364,7 +433,6 @@ namespace Com.Example.ShimmerBridge
                         {
                             Subscribe(clientId, smac);
                             await SendJson(clientId, new { type = "open_ack", ok = true, mac = smac, mode = "subscribed" });
-
                             await SendConfigSnapshot(clientId, smac);
 
                             _ = Task.Run(async () =>
@@ -380,13 +448,11 @@ namespace Com.Example.ShimmerBridge
                                     Log?.Invoke($"start retry send error: {ex.Message}");
                                 }
                             });
-
                         }
 
                         await SendJson(clientId, new { type = "start_ack", ok = true, note = "server_managed" });
                         break;
                     }
-
 
                 case "stop":
                     await SendJson(clientId, new { type = "stop_ack", ok = false, error = "server_managed" });
@@ -443,16 +509,12 @@ namespace Com.Example.ShimmerBridge
                 var set = kv.Value;
                 bool send;
                 lock (set) send = set.Contains(mac);
-                if (send)
-                {
-                    tasks.Add(SafeSend(clientId, json));
-                }
+                if (send) tasks.Add(SafeSend(clientId, json));
             }
 
             try { await Task.WhenAll(tasks); }
             catch (Exception ex)
             {
-                // non far esplodere il chiamante se 1 client fallisce
                 Log?.Invoke($"Broadcast error: {ex.Message}");
             }
         }
@@ -463,7 +525,7 @@ namespace Com.Example.ShimmerBridge
             try
             {
                 string msg = JsonSerializer.Serialize(obj);
-                return SafeSend(id, msg); // <— invece di _ws.SendAsync
+                return SafeSend(id, msg);
             }
             catch (Exception ex)
             {
@@ -471,7 +533,6 @@ namespace Com.Example.ShimmerBridge
                 return Task.CompletedTask;
             }
         }
-
 
         // ====== sessione HW ======
         private sealed class SppSession : IDisposable
@@ -483,24 +544,25 @@ namespace Com.Example.ShimmerBridge
             ShimmerLogAndStreamAndroidBluetoothV2? _core;
             EventHandler? _handler;
 
-            bool _firstMap = true;
-            bool _configured = false;
+            // indici usati
+            int iTs = -1;
 
-            // indici CAL nel primo pacchetto
-            int iTs = -1,
-                iLnaX = -1, iLnaY = -1, iLnaZ = -1,
-                iWraX = -1, iWraY = -1, iWraZ = -1,
-                iGx = -1, iGy = -1, iGz = -1,
-                iMx = -1, iMy = -1, iMz = -1,
-                iTemp = -1, iPress = -1, iVbatt = -1,
-                iA6 = -1, iA7 = -1, iA15 = -1,
-                // --- EXG (NUOVO) ---
-                iExg1Ch1 = -1, iExg1Ch2 = -1, iExg2Ch1 = -1, iExg2Ch2 = -1;
+            // EXG
+            int iExg1Ch1 = -1, iExg1Ch2 = -1, iExg2Ch1 = -1, iExg2Ch2 = -1;
+
+            // IMU
+            int iLnaX = -1, iLnaY = -1, iLnaZ = -1;   // Low-Noise Accelerometer
+            int iWraX = -1, iWraY = -1, iWraZ = -1;   // Wide-Range Accelerometer
+            int iGx = -1, iGy = -1, iGz = -1;         // Gyroscope
+            int iMx = -1, iMy = -1, iMz = -1;         // Magnetometer
+            int iTemp = -1, iPress = -1, iVbatt = -1; // BMP180 Temp/Press, Battery
+            int iA6 = -1, iA7 = -1, iA15 = -1;        // Ext ADC
 
             // memorizza ultima config applicata
             ShimmerConfig _currentCfg = new ShimmerConfig();
             public ShimmerConfig CurrentConfig => new ShimmerConfig
             {
+                // IMU flags
                 EnableLowNoiseAccelerometer = _currentCfg.EnableLowNoiseAccelerometer,
                 EnableWideRangeAccelerometer = _currentCfg.EnableWideRangeAccelerometer,
                 EnableGyroscope = _currentCfg.EnableGyroscope,
@@ -510,69 +572,47 @@ namespace Com.Example.ShimmerBridge
                 EnableExtA6 = _currentCfg.EnableExtA6,
                 EnableExtA7 = _currentCfg.EnableExtA7,
                 EnableExtA15 = _currentCfg.EnableExtA15,
+
                 SamplingRate = _currentCfg.SamplingRate,
-                // --- EXG (NUOVO) ---
+
                 EnableExg1 = _currentCfg.EnableExg1,
                 EnableExg2 = _currentCfg.EnableExg2,
-                ExgUse16Bit = _currentCfg.ExgUse16Bit
+                ExgUse16Bit = _currentCfg.ExgUse16Bit,
+                ExgMode = _currentCfg.ExgMode
             };
 
-            // === AGGIUNGERE in SppSession (ad es. subito dopo i campi iTs, iLnaX... ===
+            // dentro SppSession
+            bool _modeLocked = false;
+            public void LockMode() => _modeLocked = true;
+            public bool IsModeLocked => _modeLocked;
+
+            public Task<bool> SetExgModeAsync(ExgMode mode)
+            {
+                if (_modeLocked && mode != _currentCfg.ExgMode)
+                {
+                    _log("[CFG] exg_mode change ignored (locked after connect)");
+                    return Task.FromResult(false);
+                }
+                _currentCfg.ExgMode = mode;
+                return Task.FromResult(true);
+            }
+
             void ResetIndices()
             {
                 iTs = -1;
+                iExg1Ch1 = iExg1Ch2 = iExg2Ch1 = iExg2Ch2 = -1;
                 iLnaX = iLnaY = iLnaZ = -1;
                 iWraX = iWraY = iWraZ = -1;
                 iGx = iGy = iGz = -1;
                 iMx = iMy = iMz = -1;
                 iTemp = iPress = iVbatt = -1;
                 iA6 = iA7 = iA15 = -1;
-                // --- EXG (NUOVO) ---
-                iExg1Ch1 = iExg1Ch2 = iExg2Ch1 = iExg2Ch2 = -1;
             }
 
             void RefreshMissingIndices(ObjectCluster oc)
             {
                 if (iTs == -1) iTs = SafeIdx(oc, ShimmerConfiguration.SignalNames.SYSTEM_TIMESTAMP, "CAL");
 
-                if (_currentCfg.EnableLowNoiseAccelerometer)
-                {
-                    if (iLnaX == -1) iLnaX = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_X, "CAL");
-                    if (iLnaY == -1) iLnaY = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_Y, "CAL");
-                    if (iLnaZ == -1) iLnaZ = SafeIdx(oc, Shimmer3Configuration.SignalNames.LOW_NOISE_ACCELEROMETER_Z, "CAL");
-                }
-                if (_currentCfg.EnableWideRangeAccelerometer)
-                {
-                    if (iWraX == -1) iWraX = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_X, "CAL");
-                    if (iWraY == -1) iWraY = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_Y, "CAL");
-                    if (iWraZ == -1) iWraZ = SafeIdx(oc, Shimmer3Configuration.SignalNames.WIDE_RANGE_ACCELEROMETER_Z, "CAL");
-                }
-                if (_currentCfg.EnableGyroscope)
-                {
-                    if (iGx == -1) iGx = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_X, "CAL");
-                    if (iGy == -1) iGy = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_Y, "CAL");
-                    if (iGz == -1) iGz = SafeIdx(oc, Shimmer3Configuration.SignalNames.GYROSCOPE_Z, "CAL");
-                }
-                if (_currentCfg.EnableMagnetometer)
-                {
-                    if (iMx == -1) iMx = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_X, "CAL");
-                    if (iMy == -1) iMy = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_Y, "CAL");
-                    if (iMz == -1) iMz = SafeIdx(oc, Shimmer3Configuration.SignalNames.MAGNETOMETER_Z, "CAL");
-                }
-                if (_currentCfg.EnablePressureTemperature)
-                {
-                    if (iTemp == -1) iTemp = SafeIdx(oc, Shimmer3Configuration.SignalNames.TEMPERATURE, "CAL");
-                    if (iPress == -1) iPress = SafeIdx(oc, Shimmer3Configuration.SignalNames.PRESSURE, "CAL");
-                }
-                if (_currentCfg.EnableBattery)
-                {
-                    if (iVbatt == -1) iVbatt = SafeIdx(oc, Shimmer3Configuration.SignalNames.V_SENSE_BATT, "CAL");
-                }
-                if (_currentCfg.EnableExtA6 && iA6 == -1) iA6 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A6, "CAL");
-                if (_currentCfg.EnableExtA7 && iA7 == -1) iA7 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A7, "CAL");
-                if (_currentCfg.EnableExtA15 && iA15 == -1) iA15 = SafeIdx(oc, Shimmer3Configuration.SignalNames.EXTERNAL_ADC_A15, "CAL");
-
-                // --- EXG (NUOVO): prova più alias per compatibilità ---
                 if (_currentCfg.EnableExg1)
                 {
                     if (iExg1Ch1 == -1) iExg1Ch1 = TryIdx(oc,
@@ -593,33 +633,77 @@ namespace Com.Example.ShimmerBridge
                         ("EXG2 CH2", "CAL"), ("EXG2_CH2", "CAL"), ("EXG CH4", "CAL"),
                         ("EXG2 CH2", "RAW"));
                 }
-            }
 
+                // ===== IMU =====
+                if (_currentCfg.EnableLowNoiseAccelerometer)
+                {
+                    if (iLnaX == -1) iLnaX = TryIdx(oc,
+                        ("Low Noise Accelerometer X", "CAL"), ("Low-Noise AccelerometerX", "CAL"),
+                        ("Accelerometer X", "CAL"), ("LN_ACC_X", "CAL"), ("Low Noise Accelerometer X", "RAW"));
+                    if (iLnaY == -1) iLnaY = TryIdx(oc,
+                        ("Low Noise Accelerometer Y", "CAL"), ("Low-Noise AccelerometerY", "CAL"),
+                        ("Accelerometer Y", "CAL"), ("LN_ACC_Y", "CAL"), ("Low Noise Accelerometer Y", "RAW"));
+                    if (iLnaZ == -1) iLnaZ = TryIdx(oc,
+                        ("Low Noise Accelerometer Z", "CAL"), ("Low-Noise AccelerometerZ", "CAL"),
+                        ("Accelerometer Z", "CAL"), ("LN_ACC_Z", "CAL"), ("Low Noise Accelerometer Z", "RAW"));
+                }
+                if (_currentCfg.EnableWideRangeAccelerometer)
+                {
+                    if (iWraX == -1) iWraX = TryIdx(oc,
+                        ("Wide Range Accelerometer X", "CAL"), ("Wide-Range AccelerometerX", "CAL"),
+                        ("WR Accel X", "CAL"), ("WR_ACC_X", "CAL"), ("Wide Range Accelerometer X", "RAW"));
+                    if (iWraY == -1) iWraY = TryIdx(oc,
+                        ("Wide Range Accelerometer Y", "CAL"), ("Wide-Range AccelerometerY", "CAL"),
+                        ("WR Accel Y", "CAL"), ("WR_ACC_Y", "CAL"), ("Wide Range Accelerometer Y", "RAW"));
+                    if (iWraZ == -1) iWraZ = TryIdx(oc,
+                        ("Wide Range Accelerometer Z", "CAL"), ("Wide-Range AccelerometerZ", "CAL"),
+                        ("WR Accel Z", "CAL"), ("WR_ACC_Z", "CAL"), ("Wide Range Accelerometer Z", "RAW"));
+                }
+                if (_currentCfg.EnableGyroscope)
+                {
+                    if (iGx == -1) iGx = TryIdx(oc, ("Gyroscope X", "CAL"), ("Gyro X", "CAL"), ("GYRO_X", "CAL"), ("Gyroscope X", "RAW"));
+                    if (iGy == -1) iGy = TryIdx(oc, ("Gyroscope Y", "CAL"), ("Gyro Y", "CAL"), ("GYRO_Y", "CAL"), ("Gyroscope Y", "RAW"));
+                    if (iGz == -1) iGz = TryIdx(oc, ("Gyroscope Z", "CAL"), ("Gyro Z", "CAL"), ("GYRO_Z", "CAL"), ("Gyroscope Z", "RAW"));
+                }
+                if (_currentCfg.EnableMagnetometer)
+                {
+                    if (iMx == -1) iMx = TryIdx(oc, ("Magnetometer X", "CAL"), ("Mag X", "CAL"), ("MAG_X", "CAL"), ("Magnetometer X", "RAW"));
+                    if (iMy == -1) iMy = TryIdx(oc, ("Magnetometer Y", "CAL"), ("Mag Y", "CAL"), ("MAG_Y", "CAL"), ("Magnetometer Y", "RAW"));
+                    if (iMz == -1) iMz = TryIdx(oc, ("Magnetometer Z", "CAL"), ("Mag Z", "CAL"), ("MAG_Z", "CAL"), ("Magnetometer Z", "RAW"));
+                }
+                if (_currentCfg.EnablePressureTemperature)
+                {
+                    if (iTemp == -1) iTemp = TryIdx(oc, ("Temperature_BMP180", "CAL"), ("BMP180 Temperature", "CAL"), ("Temperature", "CAL"));
+                    if (iPress == -1) iPress = TryIdx(oc, ("Pressure_BMP180", "CAL"), ("BMP180 Pressure", "CAL"), ("Pressure", "CAL"));
+                }
+                if (_currentCfg.EnableBattery && iVbatt == -1)
+                    iVbatt = TryIdx(oc, ("Battery Voltage", "CAL"), ("VSense Batt", "CAL"), ("VBatt", "CAL"));
+
+                if (_currentCfg.EnableExtA6 && iA6 == -1) iA6 = TryIdx(oc, ("Ext A6", "CAL"), ("A6", "CAL"));
+                if (_currentCfg.EnableExtA7 && iA7 == -1) iA7 = TryIdx(oc, ("Ext A7", "CAL"), ("A7", "CAL"));
+                if (_currentCfg.EnableExtA15 && iA15 == -1) iA15 = TryIdx(oc, ("Ext A15", "CAL"), ("A15", "CAL"));
+            }
 
             public async Task<double> SetSamplingRateAsync(double newHz)
             {
                 if (_core == null) throw new InvalidOperationException("Not open");
-                bool wasStreaming = _handler != null; // se stiamo già streammando
+                bool wasStreaming = _handler != null;
 
                 if (wasStreaming)
                 {
-                    try { Stop(); } catch { /* no-op */ }
-                    await Task.Delay(100);   // era 50
+                    try { Stop(); } catch { }
+                    await Task.Delay(100);
                 }
 
                 int sr = (int)Math.Round(newHz);
                 _core.WriteSamplingRate(sr);
-                await Task.Delay(250);       // era 150
+                await Task.Delay(250);
 
-                // Reset mappa e base temporale per sessione "pulita"
                 ResetIndices();
                 _tsBase = null;
 
-
-                // 4) Allinea la config corrente
                 _currentCfg.SamplingRate = sr;
 
-                // 5) Riavvia solo se ci sono sensori attivi
                 if (wasStreaming && WsBridgeManager.AnySensorEnabled(_currentCfg))
                 {
                     Start();
@@ -628,7 +712,6 @@ namespace Com.Example.ShimmerBridge
                 _log($"[CFG] sampling rate set to {sr} Hz");
                 return sr;
             }
-
 
             // base tempo per ts relativo
             double? _tsBase = null;
@@ -672,48 +755,97 @@ namespace Com.Example.ShimmerBridge
 
             public async Task ApplyConfigAsync(ShimmerConfig cfg)
             {
+                // se la modalità è già stata “congelata” non permettere override
+                if (_modeLocked)
+                {
+                    cfg.ExgMode = _currentCfg.ExgMode;
+                }
+
                 if (_core == null) throw new InvalidOperationException("Not open");
 
-                // --- AGGIUNTA: auto-abilita EXG1+EXG2 se la board è EXG e l'utente non li ha già abilitati ---
+                // === AUTOCONFIG IN BASE ALLA BOARD RILEVATA (IMU vs EXG) ===
                 try
                 {
-                    if (!cfg.EnableExg1 && !cfg.EnableExg2)
+                    if (ShimmerScanManager.ShimmerBoardDetector.TryDetectBoardKind(_core, out var kind, out var rawId))
                     {
-                        if (ShimmerScanManager.ShimmerBoardDetector.TryDetectBoardKind(
-                                _core, out var kind, out var rawId) &&
-                            kind == ShimmerScanManager.ShimmerBoardDetector.BoardKind.EXG)
+                        if (kind == ShimmerScanManager.ShimmerBoardDetector.BoardKind.EXG)
                         {
+                            // EXG: accendi entrambe le coppie canali (leggeremo solo i 2 principali)
                             cfg.EnableExg1 = true;
                             cfg.EnableExg2 = true;
-                            cfg.ExgUse16Bit = false; // 24-bit default (come ShimmerApp)
-                            _log($"[CFG] EXG board detected ({rawId}), enabling EXG1+EXG2 @24-bit");
+                            cfg.ExgUse16Bit = false; // 24-bit
+
+                            // (IMU: lasciamo le tue regole attuali)
+                            cfg.EnableLowNoiseAccelerometer = true;
+                            cfg.EnableWideRangeAccelerometer = true;
+                            cfg.EnableGyroscope = true;
+                            cfg.EnableMagnetometer = true;
+                            cfg.EnablePressureTemperature = true;
+                            cfg.EnableBattery = true;
+                            cfg.EnableExtA6 = true;
+                            cfg.EnableExtA7 = true;
+                            cfg.EnableExtA15 = true;
+
+                            _log($"[CFG] Board={rawId} → HYBRID ALL-ON (EXG1+EXG2 + ALL IMU)");
                         }
+                        else if (kind == ShimmerScanManager.ShimmerBoardDetector.BoardKind.IMU)
+                        {
+                            bool anyImu = cfg.EnableLowNoiseAccelerometer || cfg.EnableWideRangeAccelerometer ||
+                                          cfg.EnableGyroscope || cfg.EnableMagnetometer ||
+                                          cfg.EnablePressureTemperature || cfg.EnableBattery ||
+                                          cfg.EnableExtA6 || cfg.EnableExtA7 || cfg.EnableExtA15;
+
+                            if (!anyImu)
+                            {
+                                cfg.EnableLowNoiseAccelerometer = true;
+                                cfg.EnableGyroscope = true;
+                                cfg.EnableMagnetometer = true;
+                                cfg.EnablePressureTemperature = true;
+                                cfg.EnableBattery = true;
+                            }
+
+                            // Spegni EXG su board IMU-only
+                            cfg.EnableExg1 = false;
+                            cfg.EnableExg2 = false;
+
+                            _log($"[CFG] Board={rawId} → IMU mode");
+                        }
+                        else
+                        {
+                            _log("[CFG] Board detection: Unknown → uso flags richiesti");
+                        }
+                    }
+                    else
+                    {
+                        _log("[CFG] Board detection failed → uso flags richiesti");
                     }
                 }
                 catch { /* non bloccare la config se detection fallisce */ }
 
+                // SR default: 512Hz per EXG, 100Hz per IMU
+                if (!cfg.SamplingRate.HasValue || cfg.SamplingRate.Value <= 0)
+                    cfg.SamplingRate = (cfg.EnableExg1 || cfg.EnableExg2) ? 512 : 100;
+
                 int BuildMask()
                 {
                     int mask = 0;
-                    if (cfg.EnableLowNoiseAccelerometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_A_ACCEL;
-                    if (cfg.EnableWideRangeAccelerometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_D_ACCEL;
-                    if (cfg.EnableGyroscope) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_MPU9150_GYRO;
-                    if (cfg.EnableMagnetometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_LSM303DLHC_MAG;
-                    if (cfg.EnablePressureTemperature) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_BMP180_PRESSURE;
-                    if (cfg.EnableBattery) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_VBATT;
-                    if (cfg.EnableExtA6) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A6;
-                    if (cfg.EnableExtA7) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A7;
-                    if (cfg.EnableExtA15) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A15;
 
-                    // --- EXG (NUOVO) ---
-                    if (cfg.EnableExg1)
-                        mask |= cfg.ExgUse16Bit
-                            ? (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG1_16BIT
-                            : (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG1_24BIT;
-                    if (cfg.EnableExg2)
-                        mask |= cfg.ExgUse16Bit
-                            ? (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG2_16BIT
-                            : (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG2_24BIT;
+                    // --- EXG ---
+                    if (cfg.EnableExg1) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG1_24BIT; // 0x10
+                    if (cfg.EnableExg2) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG2_24BIT; // 0x08
+
+                    // --- IMU ---
+                    if (cfg.EnableLowNoiseAccelerometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_A_ACCEL;           // 0x80
+                    if (cfg.EnableWideRangeAccelerometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_D_ACCEL;           // 0x1000
+                    if (cfg.EnableGyroscope) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_MPU9150_GYRO;      // 0x040
+                    if (cfg.EnableMagnetometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_LSM303DLHC_MAG;    // 0x20
+                    if (cfg.EnablePressureTemperature) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_BMP180_PRESSURE;   // 0x40000
+                    if (cfg.EnableBattery) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_VBATT;             // 0x2000
+
+                    // --- EXT ADC ---
+                    if (cfg.EnableExtA6) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A6;            // 0x01
+                    if (cfg.EnableExtA7) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A7;            // 0x02
+                    if (cfg.EnableExtA15) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A15;           // 0x0800
 
                     return mask;
                 }
@@ -722,14 +854,13 @@ namespace Com.Example.ShimmerBridge
                 {
                     int sr = (int)Math.Round(cfg.SamplingRate.Value);
                     _core.WriteSamplingRate(sr);
-                    await Task.Delay(250);   // era 150
+                    await Task.Delay(250);
                 }
 
                 _core.WriteSensors(BuildMask());
-                await Task.Delay(350);       // era 180
+                await Task.Delay(350);
 
-                ResetIndices();              // reset mappa completa
-                _configured = true;
+                ResetIndices();
 
                 // salva copia dell'ultima config applicata
                 _currentCfg = new ShimmerConfig
@@ -744,20 +875,19 @@ namespace Com.Example.ShimmerBridge
                     EnableExtA7 = cfg.EnableExtA7,
                     EnableExtA15 = cfg.EnableExtA15,
                     SamplingRate = cfg.SamplingRate,
-                    // --- EXG (NUOVO) ---
                     EnableExg1 = cfg.EnableExg1,
                     EnableExg2 = cfg.EnableExg2,
-                    ExgUse16Bit = cfg.ExgUse16Bit
+                    ExgUse16Bit = cfg.ExgUse16Bit,
+                    ExgMode = cfg.ExgMode
                 };
+                _log($"[CFG] ExgMode applied = {_currentCfg.ExgMode} (wire='{_currentCfg.ExgModeWire ?? "null"}')");
 
-                _log($"[CFG] applied");
+                _log($"[CFG] applied (SR={_currentCfg.SamplingRate:F0}Hz, EXG1={_currentCfg.EnableExg1}, EXG2={_currentCfg.EnableExg2}, IMU: LN={_currentCfg.EnableLowNoiseAccelerometer}, WR={_currentCfg.EnableWideRangeAccelerometer}, GYR={_currentCfg.EnableGyroscope}, MAG={_currentCfg.EnableMagnetometer}, BMP180={_currentCfg.EnablePressureTemperature}, VBATT={_currentCfg.EnableBattery}, EXT={_currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15})");
             }
 
             public void Start()
             {
                 if (_core == null) throw new InvalidOperationException("Not open");
-
-
 
                 if (_handler != null)
                 {
@@ -782,40 +912,29 @@ namespace Com.Example.ShimmerBridge
 
                             // timestamp relativo alla sessione
                             double? tsAbs = Val(SafeGet(oc, iTs));
-                            double? tsRel = null;
+                            double tsRel = 0.0;
                             if (tsAbs.HasValue)
                             {
                                 if (!_tsBase.HasValue) _tsBase = tsAbs.Value;
-                                tsRel = tsAbs.Value - _tsBase.Value; // in stesse unità di tsAbs
+                                tsRel = tsAbs.Value - _tsBase.Value; // stesse unità di tsAbs
                             }
 
-                            // estrazione valori (possono essere null se il sensore non è nel pacchetto)
-                            double? lnaX = Val(SafeGet(oc, iLnaX));
-                            double? lnaY = Val(SafeGet(oc, iLnaY));
-                            double? lnaZ = Val(SafeGet(oc, iLnaZ));
-                            double? wraX = Val(SafeGet(oc, iWraX));
-                            double? wraY = Val(SafeGet(oc, iWraY));
-                            double? wraZ = Val(SafeGet(oc, iWraZ));
-                            double? gx = Val(SafeGet(oc, iGx));
-                            double? gy = Val(SafeGet(oc, iGy));
-                            double? gz = Val(SafeGet(oc, iGz));
-                            double? mx = Val(SafeGet(oc, iMx));
-                            double? my = Val(SafeGet(oc, iMy));
-                            double? mz = Val(SafeGet(oc, iMz));
-                            double? temp = Val(SafeGet(oc, iTemp));
-                            double? press = Val(SafeGet(oc, iPress));
-                            double? vbatt = Val(SafeGet(oc, iVbatt));
-                            double? a6 = Val(SafeGet(oc, iA6));
-                            double? a7 = Val(SafeGet(oc, iA7));
-                            double? a15 = Val(SafeGet(oc, iA15));
-
-                            // --- EXG (NUOVO) ---
+                            // ====== LETTURA VALORI ======
+                            // EXG
                             double? exg1ch1 = Val(SafeGet(oc, iExg1Ch1));
                             double? exg1ch2 = Val(SafeGet(oc, iExg1Ch2));
                             double? exg2ch1 = Val(SafeGet(oc, iExg2Ch1));
                             double? exg2ch2 = Val(SafeGet(oc, iExg2Ch2));
 
-                            // payload dinamico: includo SOLO i sensori abilitati nella config corrente
+                            // IMU
+                            double? lnaX = Val(SafeGet(oc, iLnaX)), lnaY = Val(SafeGet(oc, iLnaY)), lnaZ = Val(SafeGet(oc, iLnaZ));
+                            double? wraX = Val(SafeGet(oc, iWraX)), wraY = Val(SafeGet(oc, iWraY)), wraZ = Val(SafeGet(oc, iWraZ));
+                            double? gx = Val(SafeGet(oc, iGx)), gy = Val(SafeGet(oc, iGy)), gz = Val(SafeGet(oc, iGz));
+                            double? mx = Val(SafeGet(oc, iMx)), my = Val(SafeGet(oc, iMy)), mz = Val(SafeGet(oc, iMz));
+                            double? temp = Val(SafeGet(oc, iTemp)), press = Val(SafeGet(oc, iPress)), vbatt = Val(SafeGet(oc, iVbatt));
+                            double? a6 = Val(SafeGet(oc, iA6)), a7 = Val(SafeGet(oc, iA7)), a15 = Val(SafeGet(oc, iA15));
+
+                            // ====== COSTRUZIONE PAYLOAD ======
                             var map = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
                             {
                                 ["type"] = "sample",
@@ -823,57 +942,61 @@ namespace Com.Example.ShimmerBridge
                                 ["ts"] = tsRel
                             };
 
-                            // helper per costruire oggetti non-null
-                            static object Vec3(double? x, double? y, double? z) =>
-                                new { x = x ?? 0.0, y = y ?? 0.0, z = z ?? 0.0 };
-                            static object Ext3(double? a6, double? a7, double? a15) =>
-                                new { a6 = a6 ?? 0.0, a7 = a7 ?? 0.0, a15 = a15 ?? 0.0 };
+                            // includi la modalità corrente nel sample (se impostata)
+                            if (_currentCfg.ExgMode != ExgMode.None)
+                                map["exg_mode"] = _currentCfg.ExgModeWire;
 
-                            if (_currentCfg.EnableLowNoiseAccelerometer)
-                                map["lna"] = Vec3(lnaX, lnaY, lnaZ);
-                            if (_currentCfg.EnableWideRangeAccelerometer)
-                                map["wra"] = Vec3(wraX, wraY, wraZ);
-                            if (_currentCfg.EnableGyroscope)
-                                map["gyro"] = Vec3(gx, gy, gz);
-                            if (_currentCfg.EnableMagnetometer)
-                                map["mag"] = Vec3(mx, my, mz);
-                            if (_currentCfg.EnablePressureTemperature)
-                            {
-                                map["temp"] = temp ?? 0.0;
-                                map["press"] = press ?? 0.0;
-                            }
-                            if (_currentCfg.EnableBattery)
-                                map["vbatt"] = vbatt ?? 0.0;
-                            if (_currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15)
-                                map["ext"] = Ext3(
-                                    _currentCfg.EnableExtA6 ? a6 : 0.0,
-                                    _currentCfg.EnableExtA7 ? a7 : 0.0,
-                                    _currentCfg.EnableExtA15 ? a15 : 0.0
-                                );
+                            // --- EXG payload: due canali “principali” ---
+                            bool hasExg = (_currentCfg.EnableExg1 || _currentCfg.EnableExg2) ||
+                                          exg1ch1.HasValue || exg2ch1.HasValue || exg1ch2.HasValue || exg2ch2.HasValue;
 
-                            // --- EXG nel JSON: blocchi strutturati + compatibilità con VM MAUI (ExgCh1/ExgCh2) ---
-                            // Pubblica solo se arrivano davvero i canali EXG
-                            bool hasExg1 = exg1ch1.HasValue || exg1ch2.HasValue;
-                            bool hasExg2 = exg2ch1.HasValue || exg2ch2.HasValue;
+                            if (hasExg)
+                            {
+                                double v1 = exg1ch1 ?? (exg1ch2 ?? 0.0);
+                                double v2 = exg2ch1 ?? (exg2ch2 ?? 0.0);
 
-                            if (hasExg1)
-                            {
-                                map["exg1"] = new { ch1 = exg1ch1 ?? 0.0, ch2 = exg1ch2 ?? 0.0 };
-                                map["ExgCh1"] = exg1ch1 ?? 0.0;  // compat con VM
-                                map["ExgCh2"] = exg1ch2 ?? 0.0;
+                                map["exg1"] = v1;
+                                map["exg2"] = v2;
+
+                                // compatibilità con nomi legacy
+                                map["ExgCh1"] = v1;
+                                map["ExgCh2"] = v2;
                             }
-                            else if (!hasExg1 && hasExg2)
+
+                            // --- IMU (annidato) ---
+                            if (_currentCfg.EnableLowNoiseAccelerometer || _currentCfg.EnableWideRangeAccelerometer ||
+                                _currentCfg.EnableGyroscope || _currentCfg.EnableMagnetometer ||
+                                _currentCfg.EnablePressureTemperature || _currentCfg.EnableBattery ||
+                                _currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15)
                             {
-                                // se solo EXG2 dà dati, esponi anche i flat per compat
-                                map["exg2"] = new { ch1 = exg2ch1 ?? 0.0, ch2 = exg2ch2 ?? 0.0 };
-                                map["ExgCh1"] = exg2ch1 ?? 0.0;
-                                map["ExgCh2"] = exg2ch2 ?? 0.0;
+                                if (_currentCfg.EnableLowNoiseAccelerometer)
+                                    map["lna"] = new { x = lnaX ?? 0.0, y = lnaY ?? 0.0, z = lnaZ ?? 0.0 };
+
+                                if (_currentCfg.EnableWideRangeAccelerometer)
+                                    map["wra"] = new { x = wraX ?? 0.0, y = wraY ?? 0.0, z = wraZ ?? 0.0 };
+
+                                if (_currentCfg.EnableGyroscope)
+                                    map["gyro"] = new { x = gx ?? 0.0, y = gy ?? 0.0, z = gz ?? 0.0 };
+
+                                if (_currentCfg.EnableMagnetometer)
+                                    map["mag"] = new { x = mx ?? 0.0, y = my ?? 0.0, z = mz ?? 0.0 };
+
+                                if (_currentCfg.EnablePressureTemperature)
+                                {
+                                    if (temp.HasValue) map["temp"] = temp.Value;
+                                    if (press.HasValue) map["press"] = press.Value;
+                                }
+                                if (_currentCfg.EnableBattery && vbatt.HasValue)
+                                    map["vbatt"] = vbatt.Value;
+
+                                if (_currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15)
+                                    map["ext"] = new
+                                    {
+                                        a6 = _currentCfg.EnableExtA6 ? (a6 ?? 0.0) : (double?)null,
+                                        a7 = _currentCfg.EnableExtA7 ? (a7 ?? 0.0) : (double?)null,
+                                        a15 = _currentCfg.EnableExtA15 ? (a15 ?? 0.0) : (double?)null
+                                    };
                             }
-                            else if (hasExg2)
-                            {
-                                map["exg2"] = new { ch1 = exg2ch1 ?? 0.0, ch2 = exg2ch2 ?? 0.0 };
-                            }
-                            // (se nessuno ha valori, non aggiungiamo proprio le chiavi EXG)
 
                             _broadcast(_mac, JsonSerializer.Serialize(map));
                         }
@@ -924,7 +1047,7 @@ namespace Com.Example.ShimmerBridge
                 catch { return false; }
             }
 
-            // --- helper EXG (NUOVO): prova più alias dei label ---
+            // --- helper EXG/IMU: prova più alias dei label ---
             static int TryIdx(ObjectCluster oc, params (string name, string fmt)[] cands)
             {
                 foreach (var (n, f) in cands)
@@ -946,6 +1069,7 @@ namespace Com.Example.ShimmerBridge
             if (m.StartsWith("00:06:66")) return true;
             return false;
         }
+
         private Task SafeSend(Guid clientId, string json)
         {
             if (_ws == null) return Task.CompletedTask;
@@ -960,7 +1084,6 @@ namespace Com.Example.ShimmerBridge
             }
         }
 
-
         static string GetLocalIp(Activity activity)
         {
             var wm = (WifiManager?)activity.ApplicationContext.GetSystemService(Activity.WifiService);
@@ -973,4 +1096,3 @@ namespace Com.Example.ShimmerBridge
             Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count);
     }
 }
-

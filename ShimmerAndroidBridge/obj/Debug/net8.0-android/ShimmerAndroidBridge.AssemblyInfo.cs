@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ShimmerAndroidBridge")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.2.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.2+9c715e233042f12bed1782c83a513a32a068fb8b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.2+ed0cf566f11f87519b6042badac3b424916a7c51")]
 [assembly: System.Reflection.AssemblyProductAttribute("ShimmerAndroidBridge")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ShimmerAndroidBridge")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.2.0")]
