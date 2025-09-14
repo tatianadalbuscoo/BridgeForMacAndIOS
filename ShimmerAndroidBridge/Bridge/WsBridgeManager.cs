@@ -618,18 +618,28 @@ namespace Com.Example.ShimmerBridge
                 if (iTs == -1)
                     iTs = SafeIdx(oc, ShimmerConfiguration.SignalNames.SYSTEM_TIMESTAMP, "CAL");
 
-                // === EXG SOLO DUE CANALI PRINCIPALI ===
+                // === EXG: aggiungi tutti gli alias comuni ===
                 if (_currentCfg.EnableExg1 && iExg1 == -1)
                     iExg1 = TryIdx(oc,
-                        ("EXG1 CH1", "CAL"), ("EXG CH1", "CAL"),
-                        ("ECG LA-RA", "CAL"), ("EMG CH1", "CAL"),
-                        ("EXG1 CH1", "RAW"));
+                        // underscore + varianti
+                        ("EXG_CH1", "CAL"), ("EXG1_CH1", "CAL"), ("EXG1 CH1", "CAL"), ("EXG CH1", "CAL"),
+                        // alias ECG/EMG
+                        ("ECG_CH1", "CAL"), ("EMG_CH1", "CAL"),
+                        ("ECG LA-RA", "CAL"), ("ECG RA-LL", "CAL"),
+                        // raw fallback
+                        ("EXG_CH1", "RAW"), ("EXG1_CH1", "RAW"), ("EXG1 CH1", "RAW")
+                    );
 
                 if (_currentCfg.EnableExg2 && iExg2 == -1)
                     iExg2 = TryIdx(oc,
-                        ("EXG2 CH1", "CAL"), ("EXG CH3", "CAL"),
+                        ("EXG_CH2", "CAL"), ("EXG2_CH1", "CAL"), ("EXG2 CH1", "CAL"), ("EXG CH2", "CAL"),
+                        ("ECG_CH2", "CAL"), ("EMG_CH2", "CAL"),
+                        ("ECG LA-RA", "CAL"), ("ECG RA-LA", "CAL"),
+                        // opzionale: alcune build mappano la respiration qui
                         ("RESP", "CAL"), ("Respiration", "CAL"),
-                        ("EXG2 CH1", "RAW"));
+                        ("EXG_CH2", "RAW"), ("EXG2_CH1", "RAW"), ("EXG2 CH1", "RAW")
+                    );
+
 
                 // === IMU (FUORI dall’if EXG!) ===
                 if (_currentCfg.EnableLowNoiseAccelerometer)
@@ -960,11 +970,21 @@ namespace Com.Example.ShimmerBridge
                                 map["exg_mode"] = _currentCfg.ExgModeWire;
 
                             bool hasExg = (_currentCfg.EnableExg1 && iExg1 >= 0) || (_currentCfg.EnableExg2 && iExg2 >= 0) || exg1.HasValue || exg2.HasValue;
-                            if (hasExg)
-                            {
-                                map["exg1"] = exg1 ?? 0.0;
-                                map["exg2"] = exg2 ?? 0.0;
-                            }
+
+
+                                var ch1 = exg1 ?? 0.0;
+                                var ch2 = exg2 ?? 0.0;
+
+
+                                // Nomi attesi dalla UI
+                                map["ExgCh1"] = ch1;
+                                map["ExgCh2"] = ch2;
+
+                                // Alias moderni (facoltativi; non disturbano la DataPage)
+                                map["exg1"] = ch1;
+                                map["exg2"] = ch2;
+
+
 
                             // --- IMU (annidato) ---
                             if (_currentCfg.EnableLowNoiseAccelerometer || _currentCfg.EnableWideRangeAccelerometer ||
