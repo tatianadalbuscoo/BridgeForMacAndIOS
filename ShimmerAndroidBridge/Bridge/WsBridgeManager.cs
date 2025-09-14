@@ -560,6 +560,8 @@ namespace Com.Example.ShimmerBridge
             int iA6 = -1, iA7 = -1, iA15 = -1;        // Ext ADC
 
             double? _lastVbatt = null;
+            double? _lastA6 = null, _lastA7 = null, _lastA15 = null;
+
             // memorizza ultima config applicata
             ShimmerConfig _currentCfg = new ShimmerConfig();
             public ShimmerConfig CurrentConfig => new ShimmerConfig
@@ -667,6 +669,24 @@ namespace Com.Example.ShimmerBridge
                         ("VSense Batt", "RAW"), ("VSense_Batt", "RAW"), ("VSenseBatt", "RAW"),
                         ("VSenseReg", "RAW"), ("VBatt", "RAW")
                     );
+                if (_currentCfg.EnableExtA6 && iA6 == -1)
+                    iA6 = TryIdx(oc,
+                        ("External ADC A6", "CAL"), ("Ext ADC A6", "CAL"), ("Ext A6", "CAL"), ("ADC A6", "CAL"), ("Analog A6", "CAL"), ("A6", "CAL"),
+                        ("External ADC A6", "RAW"), ("Ext ADC A6", "RAW"), ("Ext A6", "RAW"), ("ADC A6", "RAW"), ("Analog A6", "RAW"), ("A6", "RAW")
+                    );
+
+                if (_currentCfg.EnableExtA7 && iA7 == -1)
+                    iA7 = TryIdx(oc,
+                        ("External ADC A7", "CAL"), ("Ext ADC A7", "CAL"), ("Ext A7", "CAL"), ("ADC A7", "CAL"), ("Analog A7", "CAL"), ("A7", "CAL"),
+                        ("External ADC A7", "RAW"), ("Ext ADC A7", "RAW"), ("Ext A7", "RAW"), ("ADC A7", "RAW"), ("Analog A7", "RAW"), ("A7", "RAW")
+                    );
+
+                if (_currentCfg.EnableExtA15 && iA15 == -1)
+                    iA15 = TryIdx(oc,
+                        ("External ADC A15", "CAL"), ("Ext ADC A15", "CAL"), ("Ext A15", "CAL"), ("ADC A15", "CAL"), ("Analog A15", "CAL"), ("A15", "CAL"),
+                        ("External ADC A15", "RAW"), ("Ext ADC A15", "RAW"), ("Ext A15", "RAW"), ("ADC A15", "RAW"), ("Analog A15", "RAW"), ("A15", "RAW")
+                    );
+
 
             }
 
@@ -922,6 +942,10 @@ namespace Com.Example.ShimmerBridge
                             double? temp = Val(SafeGet(oc, iTemp)), press = Val(SafeGet(oc, iPress)), vbatt = Val(SafeGet(oc, iVbatt));
                             if (vbatt.HasValue) _lastVbatt = vbatt;
                             double? a6 = Val(SafeGet(oc, iA6)), a7 = Val(SafeGet(oc, iA7)), a15 = Val(SafeGet(oc, iA15));
+                            if (a6.HasValue) _lastA6 = a6;
+                            if (a7.HasValue) _lastA7 = a7;
+                            if (a15.HasValue) _lastA15 = a15;
+
 
                             // ====== COSTRUZIONE PAYLOAD ======
                             var map = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
@@ -972,10 +996,11 @@ namespace Com.Example.ShimmerBridge
                                 if (_currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15)
                                     map["ext"] = new
                                     {
-                                        a6 = _currentCfg.EnableExtA6 ? (a6 ?? 0.0) : (double?)null,
-                                        a7 = _currentCfg.EnableExtA7 ? (a7 ?? 0.0) : (double?)null,
-                                        a15 = _currentCfg.EnableExtA15 ? (a15 ?? 0.0) : (double?)null
+                                        a6 = _currentCfg.EnableExtA6 ? _lastA6 : (double?)null,
+                                        a7 = _currentCfg.EnableExtA7 ? _lastA7 : (double?)null,
+                                        a15 = _currentCfg.EnableExtA15 ? _lastA15 : (double?)null
                                     };
+
                             }
 
                             _broadcast(_mac, JsonSerializer.Serialize(map));
