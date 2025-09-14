@@ -548,7 +548,8 @@ namespace Com.Example.ShimmerBridge
             int iTs = -1;
 
             // EXG
-            int iExg1Ch1 = -1, iExg1Ch2 = -1, iExg2Ch1 = -1, iExg2Ch2 = -1;
+            //int iExg1Ch1 = -1, iExg1Ch2 = -1, iExg2Ch1 = -1, iExg2Ch2 = -1;
+            int iExg1 = -1, iExg2 = -1;
 
             // IMU
             int iLnaX = -1, iLnaY = -1, iLnaZ = -1;   // Low-Noise Accelerometer
@@ -600,7 +601,7 @@ namespace Com.Example.ShimmerBridge
             void ResetIndices()
             {
                 iTs = -1;
-                iExg1Ch1 = iExg1Ch2 = iExg2Ch1 = iExg2Ch2 = -1;
+                iExg1 = iExg2 = -1;
                 iLnaX = iLnaY = iLnaZ = -1;
                 iWraX = iWraY = iWraZ = -1;
                 iGx = iGy = iGz = -1;
@@ -611,53 +612,34 @@ namespace Com.Example.ShimmerBridge
 
             void RefreshMissingIndices(ObjectCluster oc)
             {
-                if (iTs == -1) iTs = SafeIdx(oc, ShimmerConfiguration.SignalNames.SYSTEM_TIMESTAMP, "CAL");
+                if (iTs == -1)
+                    iTs = SafeIdx(oc, ShimmerConfiguration.SignalNames.SYSTEM_TIMESTAMP, "CAL");
 
-                if (_currentCfg.EnableExg1)
-                {
-                    if (iExg1Ch1 == -1) iExg1Ch1 = TryIdx(oc,
-                        ("EXG1 CH1", "CAL"), ("EXG1_CH1", "CAL"), ("EXG CH1", "CAL"),
+                // === EXG SOLO DUE CANALI PRINCIPALI ===
+                if (_currentCfg.EnableExg1 && iExg1 == -1)
+                    iExg1 = TryIdx(oc,
+                        ("EXG1 CH1", "CAL"), ("EXG CH1", "CAL"),
                         ("ECG LA-RA", "CAL"), ("EMG CH1", "CAL"),
                         ("EXG1 CH1", "RAW"));
-                    if (iExg1Ch2 == -1) iExg1Ch2 = TryIdx(oc,
-                        ("EXG1 CH2", "CAL"), ("EXG1_CH2", "CAL"), ("EXG CH2", "CAL"),
-                        ("ECG LL-LA", "CAL"), ("EMG CH2", "CAL"),
-                        ("EXG1 CH2", "RAW"));
-                }
-                if (_currentCfg.EnableExg2)
-                {
-                    if (iExg2Ch1 == -1) iExg2Ch1 = TryIdx(oc,
-                        ("EXG2 CH1", "CAL"), ("EXG2_CH1", "CAL"), ("EXG CH3", "CAL"),
-                        ("EXG2 CH1", "RAW"));
-                    if (iExg2Ch2 == -1) iExg2Ch2 = TryIdx(oc,
-                        ("EXG2 CH2", "CAL"), ("EXG2_CH2", "CAL"), ("EXG CH4", "CAL"),
-                        ("EXG2 CH2", "RAW"));
-                }
 
-                // ===== IMU =====
+                if (_currentCfg.EnableExg2 && iExg2 == -1)
+                    iExg2 = TryIdx(oc,
+                        ("EXG2 CH1", "CAL"), ("EXG CH3", "CAL"),
+                        ("RESP", "CAL"), ("Respiration", "CAL"),
+                        ("EXG2 CH1", "RAW"));
+
+                // === IMU (FUORI dall’if EXG!) ===
                 if (_currentCfg.EnableLowNoiseAccelerometer)
                 {
-                    if (iLnaX == -1) iLnaX = TryIdx(oc,
-                        ("Low Noise Accelerometer X", "CAL"), ("Low-Noise AccelerometerX", "CAL"),
-                        ("Accelerometer X", "CAL"), ("LN_ACC_X", "CAL"), ("Low Noise Accelerometer X", "RAW"));
-                    if (iLnaY == -1) iLnaY = TryIdx(oc,
-                        ("Low Noise Accelerometer Y", "CAL"), ("Low-Noise AccelerometerY", "CAL"),
-                        ("Accelerometer Y", "CAL"), ("LN_ACC_Y", "CAL"), ("Low Noise Accelerometer Y", "RAW"));
-                    if (iLnaZ == -1) iLnaZ = TryIdx(oc,
-                        ("Low Noise Accelerometer Z", "CAL"), ("Low-Noise AccelerometerZ", "CAL"),
-                        ("Accelerometer Z", "CAL"), ("LN_ACC_Z", "CAL"), ("Low Noise Accelerometer Z", "RAW"));
+                    if (iLnaX == -1) iLnaX = TryIdx(oc, ("Low Noise Accelerometer X", "CAL"), ("Accelerometer X", "CAL"), ("LN_ACC_X", "CAL"), ("Low Noise Accelerometer X", "RAW"));
+                    if (iLnaY == -1) iLnaY = TryIdx(oc, ("Low Noise Accelerometer Y", "CAL"), ("Accelerometer Y", "CAL"), ("LN_ACC_Y", "CAL"), ("Low Noise Accelerometer Y", "RAW"));
+                    if (iLnaZ == -1) iLnaZ = TryIdx(oc, ("Low Noise Accelerometer Z", "CAL"), ("Accelerometer Z", "CAL"), ("LN_ACC_Z", "CAL"), ("Low Noise Accelerometer Z", "RAW"));
                 }
                 if (_currentCfg.EnableWideRangeAccelerometer)
                 {
-                    if (iWraX == -1) iWraX = TryIdx(oc,
-                        ("Wide Range Accelerometer X", "CAL"), ("Wide-Range AccelerometerX", "CAL"),
-                        ("WR Accel X", "CAL"), ("WR_ACC_X", "CAL"), ("Wide Range Accelerometer X", "RAW"));
-                    if (iWraY == -1) iWraY = TryIdx(oc,
-                        ("Wide Range Accelerometer Y", "CAL"), ("Wide-Range AccelerometerY", "CAL"),
-                        ("WR Accel Y", "CAL"), ("WR_ACC_Y", "CAL"), ("Wide Range Accelerometer Y", "RAW"));
-                    if (iWraZ == -1) iWraZ = TryIdx(oc,
-                        ("Wide Range Accelerometer Z", "CAL"), ("Wide-Range AccelerometerZ", "CAL"),
-                        ("WR Accel Z", "CAL"), ("WR_ACC_Z", "CAL"), ("Wide Range Accelerometer Z", "RAW"));
+                    if (iWraX == -1) iWraX = TryIdx(oc, ("Wide Range Accelerometer X", "CAL"), ("WR Accel X", "CAL"), ("WR_ACC_X", "CAL"), ("Wide Range Accelerometer X", "RAW"));
+                    if (iWraY == -1) iWraY = TryIdx(oc, ("Wide Range Accelerometer Y", "CAL"), ("WR Accel Y", "CAL"), ("WR_ACC_Y", "CAL"), ("Wide Range Accelerometer Y", "RAW"));
+                    if (iWraZ == -1) iWraZ = TryIdx(oc, ("Wide Range Accelerometer Z", "CAL"), ("WR Accel Z", "CAL"), ("WR_ACC_Z", "CAL"), ("Wide Range Accelerometer Z", "RAW"));
                 }
                 if (_currentCfg.EnableGyroscope)
                 {
@@ -683,6 +665,7 @@ namespace Com.Example.ShimmerBridge
                 if (_currentCfg.EnableExtA7 && iA7 == -1) iA7 = TryIdx(oc, ("Ext A7", "CAL"), ("A7", "CAL"));
                 if (_currentCfg.EnableExtA15 && iA15 == -1) iA15 = TryIdx(oc, ("Ext A15", "CAL"), ("A15", "CAL"));
             }
+
 
             public async Task<double> SetSamplingRateAsync(double newHz)
             {
@@ -824,7 +807,8 @@ namespace Com.Example.ShimmerBridge
 
                 // SR default: 512Hz per EXG, 100Hz per IMU
                 if (!cfg.SamplingRate.HasValue || cfg.SamplingRate.Value <= 0)
-                    cfg.SamplingRate = (cfg.EnableExg1 || cfg.EnableExg2) ? 512 : 100;
+                    cfg.SamplingRate = 100;
+
 
                 int BuildMask()
                 {
@@ -921,10 +905,8 @@ namespace Com.Example.ShimmerBridge
 
                             // ====== LETTURA VALORI ======
                             // EXG
-                            double? exg1ch1 = Val(SafeGet(oc, iExg1Ch1));
-                            double? exg1ch2 = Val(SafeGet(oc, iExg1Ch2));
-                            double? exg2ch1 = Val(SafeGet(oc, iExg2Ch1));
-                            double? exg2ch2 = Val(SafeGet(oc, iExg2Ch2));
+                            double? exg1 = Val(SafeGet(oc, iExg1));
+                            double? exg2 = Val(SafeGet(oc, iExg2));
 
                             // IMU
                             double? lnaX = Val(SafeGet(oc, iLnaX)), lnaY = Val(SafeGet(oc, iLnaY)), lnaZ = Val(SafeGet(oc, iLnaZ));
@@ -946,21 +928,11 @@ namespace Com.Example.ShimmerBridge
                             if (_currentCfg.ExgMode != ExgMode.None)
                                 map["exg_mode"] = _currentCfg.ExgModeWire;
 
-                            // --- EXG payload: due canali “principali” ---
-                            bool hasExg = (_currentCfg.EnableExg1 || _currentCfg.EnableExg2) ||
-                                          exg1ch1.HasValue || exg2ch1.HasValue || exg1ch2.HasValue || exg2ch2.HasValue;
-
+                            bool hasExg = (_currentCfg.EnableExg1 && iExg1 >= 0) || (_currentCfg.EnableExg2 && iExg2 >= 0) || exg1.HasValue || exg2.HasValue;
                             if (hasExg)
                             {
-                                double v1 = exg1ch1 ?? (exg1ch2 ?? 0.0);
-                                double v2 = exg2ch1 ?? (exg2ch2 ?? 0.0);
-
-                                map["exg1"] = v1;
-                                map["exg2"] = v2;
-
-                                // compatibilità con nomi legacy
-                                map["ExgCh1"] = v1;
-                                map["ExgCh2"] = v2;
+                                map["exg1"] = exg1 ?? 0.0;
+                                map["exg2"] = exg2 ?? 0.0;
                             }
 
                             // --- IMU (annidato) ---

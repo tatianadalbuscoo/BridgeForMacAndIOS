@@ -455,6 +455,8 @@ namespace com.example.shimmerbridge.cs
                 {
                     var wire = UiModeToWire(x.SelectedExgMode);
                     cfg.ExgModeWire = wire; // salva la scelta utente (server poi la stampa)
+                    cfg.SamplingRate = 51.2;  // oppure 128.0 se vuoi più “reattivo”
+
                     Android.Util.Log.Info(TAG, $"[UI] {x.Name} [{x.Mac}] exg_mode (wire)='{wire}'");
                 }
 
