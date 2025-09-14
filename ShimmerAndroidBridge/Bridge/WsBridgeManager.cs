@@ -559,6 +559,7 @@ namespace Com.Example.ShimmerBridge
             int iTemp = -1, iPress = -1, iVbatt = -1; // BMP180 Temp/Press, Battery
             int iA6 = -1, iA7 = -1, iA15 = -1;        // Ext ADC
 
+            double? _lastVbatt = null;
             // memorizza ultima config applicata
             ShimmerConfig _currentCfg = new ShimmerConfig();
             public ShimmerConfig CurrentConfig => new ShimmerConfig
@@ -659,11 +660,14 @@ namespace Com.Example.ShimmerBridge
                     if (iPress == -1) iPress = TryIdx(oc, ("Pressure_BMP180", "CAL"), ("BMP180 Pressure", "CAL"), ("Pressure", "CAL"));
                 }
                 if (_currentCfg.EnableBattery && iVbatt == -1)
-                    iVbatt = TryIdx(oc, ("Battery Voltage", "CAL"), ("VSense Batt", "CAL"), ("VBatt", "CAL"));
+                    iVbatt = TryIdx(oc,
+                        ("Battery Voltage", "CAL"), ("Battery", "CAL"),
+                        ("VSense Batt", "CAL"), ("VSense_Batt", "CAL"), ("VSenseBatt", "CAL"),
+                        ("VSenseReg", "CAL"), ("VBatt", "CAL"),
+                        ("VSense Batt", "RAW"), ("VSense_Batt", "RAW"), ("VSenseBatt", "RAW"),
+                        ("VSenseReg", "RAW"), ("VBatt", "RAW")
+                    );
 
-                if (_currentCfg.EnableExtA6 && iA6 == -1) iA6 = TryIdx(oc, ("Ext A6", "CAL"), ("A6", "CAL"));
-                if (_currentCfg.EnableExtA7 && iA7 == -1) iA7 = TryIdx(oc, ("Ext A7", "CAL"), ("A7", "CAL"));
-                if (_currentCfg.EnableExtA15 && iA15 == -1) iA15 = TryIdx(oc, ("Ext A15", "CAL"), ("A15", "CAL"));
             }
 
 
@@ -809,6 +813,8 @@ namespace Com.Example.ShimmerBridge
                 if (!cfg.SamplingRate.HasValue || cfg.SamplingRate.Value <= 0)
                     cfg.SamplingRate = 100;
 
+                cfg.EnableBattery = true;
+
 
                 int BuildMask()
                 {
@@ -914,6 +920,7 @@ namespace Com.Example.ShimmerBridge
                             double? gx = Val(SafeGet(oc, iGx)), gy = Val(SafeGet(oc, iGy)), gz = Val(SafeGet(oc, iGz));
                             double? mx = Val(SafeGet(oc, iMx)), my = Val(SafeGet(oc, iMy)), mz = Val(SafeGet(oc, iMz));
                             double? temp = Val(SafeGet(oc, iTemp)), press = Val(SafeGet(oc, iPress)), vbatt = Val(SafeGet(oc, iVbatt));
+                            if (vbatt.HasValue) _lastVbatt = vbatt;
                             double? a6 = Val(SafeGet(oc, iA6)), a7 = Val(SafeGet(oc, iA7)), a15 = Val(SafeGet(oc, iA15));
 
                             // ====== COSTRUZIONE PAYLOAD ======
@@ -958,8 +965,9 @@ namespace Com.Example.ShimmerBridge
                                     if (temp.HasValue) map["temp"] = temp.Value;
                                     if (press.HasValue) map["press"] = press.Value;
                                 }
-                                if (_currentCfg.EnableBattery && vbatt.HasValue)
-                                    map["vbatt"] = vbatt.Value;
+                                if (_currentCfg.EnableBattery && _lastVbatt.HasValue)
+                                    map["vbatt"] = _lastVbatt.Value;
+
 
                                 if (_currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15)
                                     map["ext"] = new
