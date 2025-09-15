@@ -168,14 +168,14 @@ namespace Com.Example.ShimmerBridge
             var applied = sess.CurrentConfig;
             Log?.Invoke($"[SERVER] applied   exg_mode (wire)='{applied.ExgModeWire ?? "null"}' enum={applied.ExgMode}");
 
-            if (AnySensorEnabled(cfg)) sess.Start();
+            if (AnySensorEnabled(sess.CurrentConfig)) sess.Start();
 
             sess.LockMode();
             _macSessions[mac] = sess;
 
             // broadcast iniziale della config effettiva (include exg_mode)
             await BroadcastToSubscribers(mac, JsonSerializer.Serialize(
-                new { type = "config_changed", mac, cfg = sess.CurrentConfig }));
+            new { type = "config_changed", mac, cfg = sess.CurrentConfig, available = sess.EnabledBlocks() }));
         }
 
         // === Update live della configurazione sensori per un MAC attivo
@@ -197,10 +197,10 @@ namespace Com.Example.ShimmerBridge
                 var applied2 = sess.CurrentConfig;
                 Log?.Invoke($"[SERVER] update applied  exg_mode (wire)='{applied2.ExgModeWire ?? "null"}' enum={applied2.ExgMode}");
 
-                if (AnySensorEnabled(cfg)) sess.Start();
+                if (AnySensorEnabled(sess.CurrentConfig)) sess.Start();
 
                 // manda la config effettivamente applicata (include exg_mode)
-                var msg = new { type = "config_changed", mac, cfg = sess.CurrentConfig };
+                var msg = new { type = "config_changed", mac, cfg = sess.CurrentConfig, available = sess.EnabledBlocks() };
                 await BroadcastToSubscribers(mac, JsonSerializer.Serialize(msg));
 
                 Log?.Invoke($"[SERVER] Reconfigured {mac} (mode locked)");
@@ -232,8 +232,8 @@ namespace Com.Example.ShimmerBridge
                 if (ok)
                 {
                     var cfg = sess.CurrentConfig;
-                    await BroadcastToSubscribers(mac, System.Text.Json.JsonSerializer.Serialize(
-                        new { type = "config_changed", mac, cfg }));
+                    await BroadcastToSubscribers(mac, JsonSerializer.Serialize(
+                    new { type = "config_changed", mac, cfg, available = sess.EnabledBlocks() }));
                 }
                 return ok;
             }
@@ -292,7 +292,7 @@ namespace Com.Example.ShimmerBridge
             if (_macSessions.TryGetValue(mac, out var sess))
             {
                 var cfg = sess.CurrentConfig;
-                return SendJson(clientId, new { type = "config_changed", mac, cfg });
+                return SendJson(clientId, new { type = "config_changed", mac, cfg, available = sess.EnabledBlocks() });
             }
             return Task.CompletedTask;
         }
@@ -585,8 +585,23 @@ namespace Com.Example.ShimmerBridge
                 ExgMode = _currentCfg.ExgMode
             };
 
-            // dentro SppSession
-            bool _modeLocked = false;
+                        // Elenco simbolico dei blocchi che il client può mostrare
+            public IReadOnlyList<string> EnabledBlocks()
+            {
+                var list = new List<string>();
+                if (_currentCfg.EnableExg1 || _currentCfg.EnableExg2) list.Add("exg");
+                if (_currentCfg.EnableLowNoiseAccelerometer) list.Add("lna");
+                if (_currentCfg.EnableWideRangeAccelerometer) list.Add("wra");
+                if (_currentCfg.EnableGyroscope) list.Add("gyro");
+                if (_currentCfg.EnableMagnetometer) list.Add("mag");
+                if (_currentCfg.EnablePressureTemperature) { list.Add("temp"); list.Add("press"); }
+                if (_currentCfg.EnableBattery) list.Add("vbatt");
+                if (_currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15) list.Add("ext");
+                return list;
+            }
+
+    // dentro SppSession
+    bool _modeLocked = false;
             public void LockMode() => _modeLocked = true;
             public bool IsModeLocked => _modeLocked;
 
@@ -785,26 +800,19 @@ namespace Com.Example.ShimmerBridge
                 {
                     if (ShimmerScanManager.ShimmerBoardDetector.TryDetectBoardKind(_core, out var kind, out var rawId))
                     {
+                        // DOPO: su EXG rispetta i flag scelti dall’utente per gli IMU.
+                        // Manteniamo solo l’EXG acceso, per garantire ECG/EMG/Resp/Test.
                         if (kind == ShimmerScanManager.ShimmerBoardDetector.BoardKind.EXG)
                         {
-                            // EXG: accendi entrambe le coppie canali (leggeremo solo i 2 principali)
+                            // EXG acceso (canali principali), profondità 24-bit di default
                             cfg.EnableExg1 = true;
                             cfg.EnableExg2 = true;
-                            cfg.ExgUse16Bit = false; // 24-bit
+                            cfg.ExgUse16Bit = false;
 
-                            // (IMU: lasciamo le tue regole attuali)
-                            cfg.EnableLowNoiseAccelerometer = true;
-                            cfg.EnableWideRangeAccelerometer = true;
-                            cfg.EnableGyroscope = true;
-                            cfg.EnableMagnetometer = true;
-                            cfg.EnablePressureTemperature = true;
-                            cfg.EnableBattery = true;
-                            cfg.EnableExtA6 = true;
-                            cfg.EnableExtA7 = true;
-                            cfg.EnableExtA15 = true;
-
-                            _log($"[CFG] Board={rawId} → HYBRID ALL-ON (EXG1+EXG2 + ALL IMU)");
+                            // ⛔ NON toccare i flag IMU: usa quelli della UI (cfg.* così come arrivano)
+                            _log($"[CFG] Board={rawId} → HYBRID (EXG on; IMU via UI)");
                         }
+
                         else if (kind == ShimmerScanManager.ShimmerBoardDetector.BoardKind.IMU)
                         {
                             bool anyImu = cfg.EnableLowNoiseAccelerometer || cfg.EnableWideRangeAccelerometer ||
@@ -843,7 +851,6 @@ namespace Com.Example.ShimmerBridge
                 if (!cfg.SamplingRate.HasValue || cfg.SamplingRate.Value <= 0)
                     cfg.SamplingRate = 100;
 
-                cfg.EnableBattery = true;
 
 
                 int BuildMask()
