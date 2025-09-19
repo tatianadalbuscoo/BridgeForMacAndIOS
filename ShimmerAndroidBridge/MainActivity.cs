@@ -10,6 +10,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using STimers = System.Timers;
 using Com.Example.ShimmerBridge;
+using ShimmerBridgeScan;
 using Android.Graphics;
 using Android.Graphics.Drawables;
 using AndroidResource = ShimmerAndroidBridge.Resource;
@@ -141,7 +142,7 @@ namespace com.example.shimmerbridge.cs
             }
 
             foreach (var d in paired
-                     .Where(d => Com.Example.ShimmerBridge.ShimmerScanManager.LooksLikeShimmer(d.Name, d.Address))
+                     .Where(d => ShimmerScanManager.LooksLikeShimmer(d.Name, d.Address))
                      .OrderBy(d => d.Name ?? d.Address))
             {
                 var ui = BuildDeviceCard(d);
