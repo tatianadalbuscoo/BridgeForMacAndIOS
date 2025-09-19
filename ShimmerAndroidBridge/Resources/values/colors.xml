@@ -1,25 +1,40 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
+
+	<!--
+	App color palette: soft beige + caramel theme.
+	Background/surface for pages and cards, warm browns for text,
+	and caramel tones for primary actions and ripples.
+	-->
+
 <resources>
-	<!-- App palette (soft beige + caramel) -->
+	
+	<!-- App background (page backdrop) -->
 	<color name="bg">#FAF1E6</color>
-	<!-- app background -->
+
+	<!-- Card/container surface -->
 	<color name="surface">#FFFEFC</color>
-	<!-- cards -->
+
+	<!-- Primary text (warm brown) -->
 	<color name="text">#7B4F2C</color>
-	<!-- main text (brown) -->
+
+	<!-- Secondary/muted text -->
 	<color name="textMuted">#9A6C47</color>
 
+	<!-- Primary brand (buttons/accents) -->
 	<color name="caramel">#C3743B</color>
-	<!-- primary button -->
-	<color name="caramelDark">#A66131</color>
-	<!-- status bar / pressed -->
-	<color name="caramelLight">#E7B085</color>
-	<!-- highlight/ripple -->
 
-	<!-- keep these names for existing drawables -->
+	<!-- Darker caramel (pressed / status bar) -->
+	<color name="caramelDark">#A66131</color>
+
+	<!-- Light caramel (highlights / ripple) -->
+	<color name="caramelLight">#E7B085</color>
+
+	<!-- Soft border color (card outlines) -->
 	<color name="gray200">#EDE3D6</color>
-	<!-- soft border for card -->
+
+	<!-- Soft ripple/hover tone -->
 	<color name="gray300">#E5D6C5</color>
-	<!-- soft ripple for buttons -->
+
+	<!-- Utility white -->
 	<color name="white">#FFFFFF</color>
 </resources>

@@ -1,4 +1,10 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
+
+	<!--
+	App style definitions: theme, text styles, buttons, cards, and checkbox.
+	Defines a light caramel-based look using custom drawables and palette colors.
+	-->
+
 <resources>
 
 	<!-- App theme using only platform attrs -->
@@ -6,7 +12,6 @@
 		<item name="android:windowBackground">@color/bg</item>
 		<item name="android:textColorPrimary">@color/text</item>
 		<item name="android:textColor">@color/text</item>
-		<!-- accent color for widgets (API 21+) -->
 		<item name="android:colorAccent">@color/caramel</item>
 	</style>
 

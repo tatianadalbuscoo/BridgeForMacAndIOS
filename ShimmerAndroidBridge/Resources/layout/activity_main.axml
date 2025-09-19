@@ -1,22 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
+
+<!--
+Root layout: scrollable screen with a vertical content column and themed background.
+Shows paired Shimmer devices as cards, plus Connect/Stop actions and a status label.
+-->
+
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg">
 
+  <!-- Content container: vertical stack with page padding -->
   <LinearLayout
       android:orientation="vertical"
       android:padding="16dp"
       android:layout_width="match_parent"
       android:layout_height="wrap_content">
 
+    <!-- Page title -->
     <TextView
         style="@style/H1"
         android:text="Paired Shimmer devices"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 
-    <!-- Contenitore dove il codice aggiunge le card per ogni Shimmer -->
+    <!-- Dynamic device list: cards are added here programmatically -->
     <LinearLayout
         android:id="@+id/deviceGroup"
         android:orientation="vertical"
@@ -24,13 +32,14 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp" />
 
-    <!-- Bottoni -->
+    <!-- Action row: Connect/Start and Stop buttons -->
     <LinearLayout
         android:orientation="horizontal"
         android:layout_marginTop="16dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
+      <!-- Connect to selected devices and start streaming -->
       <Button
           android:id="@+id/btnStart"
           style="@style/PrimaryButton"
@@ -39,6 +48,7 @@
           android:layout_height="wrap_content"
           android:layout_weight="1" />
 
+      <!-- Stop streaming / disconnect -->
       <Button
           android:id="@+id/btnStop"
           style="@style/AccentButton"
@@ -49,6 +59,7 @@
           android:layout_marginStart="8dp" />
     </LinearLayout>
 
+    <!-- Status feedback for the current scanning/connection state -->
     <TextView
         android:id="@+id/txtStatus"
         style="@style/Label"

@@ -1,4 +1,10 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
+
+	<!-- 
+	Ripple drawable: rounded rectangle with caramel stroke and transparent fill, 
+	showing a gray ripple effect on press. 
+	-->
+
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
     android:color="@color/gray300">
 	<item>
