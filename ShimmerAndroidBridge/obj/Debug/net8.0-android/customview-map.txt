@@ -1,7 +1,5 @@
 Button;obj\Debug\net8.0-android\res\layout\activity_main.xml
-CheckBox;obj\Debug\net8.0-android\res\layout\activity_main.xml
 color;obj\Debug\net8.0-android\res\values\colors.xml
-color;obj\Debug\net8.0-android\res\values\styles.xml
 corners;obj\Debug\net8.0-android\res\drawable\btn_accent.xml
 corners;obj\Debug\net8.0-android\res\drawable\btn_primary.xml
 corners;obj\Debug\net8.0-android\res\drawable\card.xml
@@ -23,7 +21,6 @@ shape;obj\Debug\net8.0-android\res\drawable\card.xml
 solid;obj\Debug\net8.0-android\res\drawable\btn_accent.xml
 solid;obj\Debug\net8.0-android\res\drawable\btn_primary.xml
 solid;obj\Debug\net8.0-android\res\drawable\card.xml
-Spinner;obj\Debug\net8.0-android\res\layout\activity_main.xml
 stroke;obj\Debug\net8.0-android\res\drawable\btn_accent.xml
 stroke;obj\Debug\net8.0-android\res\drawable\card.xml
 style;obj\Debug\net8.0-android\res\values\styles.xml

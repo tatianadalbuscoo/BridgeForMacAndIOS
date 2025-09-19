@@ -185,7 +185,7 @@
           }
         }
       },
-      "WatsonWebsocket/4.1.5": {
+      "WatsonWebsocket/4.1.6": {
         "type": "package",
         "compile": {
           "lib/net8.0/WatsonWebsocket.dll": {
@@ -340,7 +340,7 @@
           }
         }
       },
-      "WatsonWebsocket/4.1.5": {
+      "WatsonWebsocket/4.1.6": {
         "type": "package",
         "compile": {
           "lib/net8.0/WatsonWebsocket.dll": {
@@ -495,7 +495,7 @@
           }
         }
       },
-      "WatsonWebsocket/4.1.5": {
+      "WatsonWebsocket/4.1.6": {
         "type": "package",
         "compile": {
           "lib/net8.0/WatsonWebsocket.dll": {
@@ -650,7 +650,7 @@
           }
         }
       },
-      "WatsonWebsocket/4.1.5": {
+      "WatsonWebsocket/4.1.6": {
         "type": "package",
         "compile": {
           "lib/net8.0/WatsonWebsocket.dll": {
@@ -802,7 +802,7 @@
           }
         }
       },
-      "WatsonWebsocket/4.1.5": {
+      "WatsonWebsocket/4.1.6": {
         "type": "package",
         "compile": {
           "lib/net8.0/WatsonWebsocket.dll": {
@@ -1220,10 +1220,10 @@
         "version.txt"
       ]
     },
-    "WatsonWebsocket/4.1.5": {
-      "sha512": "Wcij3cRZC/4rQDdXoB4ROmPdZ5ffra8xdfaKoDeRy0YL8qq1dteyyHIXAk9qPHBVLhq0AriKoFTMn+d24uLm9Q==",
+    "WatsonWebsocket/4.1.6": {
+      "sha512": "h0GxSc1RlzxSnjZYg6ede3V3KpEbuzAGuQ/EZCDVdeJdexbC4uo3XJF1aKTL96LkLGffNSLe1l1TqXHjpNbDHg==",
       "type": "package",
-      "path": "watsonwebsocket/4.1.5",
+      "path": "watsonwebsocket/4.1.6",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -1242,14 +1242,14 @@
         "lib/netstandard2.1/WatsonWebsocket.dll",
         "lib/netstandard2.1/WatsonWebsocket.xml",
         "watson.png",
-        "watsonwebsocket.4.1.5.nupkg.sha512",
+        "watsonwebsocket.4.1.6.nupkg.sha512",
         "watsonwebsocket.nuspec"
       ]
     },
     "ShimmerAPI/1.0.0": {
       "type": "project",
-      "path": "../ShimmerAPI/ShimmerAPI/ShimmerAPI.csproj",
-      "msbuildProject": "../ShimmerAPI/ShimmerAPI/ShimmerAPI.csproj"
+      "path": "../ShimmerAPI/ShimmerAPI.csproj",
+      "msbuildProject": "../ShimmerAPI/ShimmerAPI.csproj"
     }
   },
   "projectFileDependencyGroups": {
@@ -1292,8 +1292,8 @@
         "net8.0-android34.0": {
           "targetAlias": "net8.0-android",
           "projectReferences": {
-            "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAPI\\ShimmerAPI\\ShimmerAPI.csproj": {
-              "projectPath": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAPI\\ShimmerAPI\\ShimmerAPI.csproj"
+            "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAPI\\ShimmerAPI.csproj": {
+              "projectPath": "C:\\scuola\\Master\\1 progetto di semestre\\shimmergsr-main\\ShimmerAndroidBridge\\ShimmerAPI\\ShimmerAPI.csproj"
             }
           }
         }
