@@ -1,0 +1,42 @@
+# Visual Studio
+.vs/
+
+# Output di build (.NET / MAUI)
+[Bb]in/
+[Oo]bj/
+artifacts/
+[Ll]og/
+[Ll]ogs/
+
+# User/IDE files (not shareable)
+*.user
+*.suo
+*.rsuser
+
+# NuGet
+**/packages/*
+!**/packages/build/
+*.nupkg
+*.snupkg
+
+# Debug/cache
+*.pidb
+*.pdb
+*.mdb
+
+# Android
+*.apk
+*.ap_
+*.aab
+*.keystore
+*.jks
+.gradle/
+**/build/
+
+# iOS/Xcode (se presenti)
+DerivedData/
+*.xcworkspace/
+*.xcuserdatad/
+*.xcuserstate
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/

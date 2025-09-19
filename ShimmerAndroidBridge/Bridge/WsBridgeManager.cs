@@ -9,8 +9,9 @@ using System.Net.WebSockets;
 using Android.Bluetooth;
 using Android.Net.Wifi;
 using WatsonWebsocket;
-using XR2Learn_ShimmerAPI.IMU.Android;
-using XR2Learn_ShimmerAPI; // for ShimmerScanManager
+//using XR2Learn_ShimmerAPI.IMU.Android;
+using ShimmerSDK; // for ShimmerScanManager
+using ShimmerSDK.Android;
 using ShimmerAPI;
 using Activity = Android.App.Activity;
 using System.Text.Json.Serialization;

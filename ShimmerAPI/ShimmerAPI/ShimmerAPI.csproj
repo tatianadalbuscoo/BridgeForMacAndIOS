@@ -1,10 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- Targets -->
 	<PropertyGroup>
 		<TargetFrameworks>net8.0;netstandard2.0</TargetFrameworks>
 		<Platforms>AnyCPU;x86</Platforms>
 		<PlatformTarget>AnyCPU</PlatformTarget>
 	</PropertyGroup>
 
+	<!-- Debug configs -->
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
 		<GenerateAssemblyInfo>False</GenerateAssemblyInfo>
 		<DebugType>embedded</DebugType>
@@ -22,13 +25,13 @@
 		<DebugType>embedded</DebugType>
 	</PropertyGroup>
 
-	<!-- Libreria nativa SOLO per Windows -->
+	<!-- Windows-only native lib -->
 	<ItemGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
 		<None Remove="libs\ShimmerClosedLibraryRev0_5.dll" />
 		<EmbeddedResource Include="libs\ShimmerClosedLibraryRev0_5.dll" />
 	</ItemGroup>
 
-	<!-- Pacchetti comuni -->
+	<!-- Common packages -->
 	<ItemGroup>
 		<PackageReference Include="Google.Protobuf" Version="3.17.3" />
 		<PackageReference Include="Grpc.Tools" Version="2.38.1">
@@ -38,6 +41,7 @@
 		<PackageReference Include="System.IO.Ports" Version="5.0.1" />
 	</ItemGroup>
 
+	<!-- Folders -->
 	<ItemGroup>
 		<Folder Include="Properties\" />
 	</ItemGroup>

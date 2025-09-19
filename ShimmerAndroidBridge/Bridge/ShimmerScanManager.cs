@@ -8,7 +8,7 @@ using System.Reflection;
 using Android.App;
 using Android.Bluetooth;
 using Android.Content;
-using XR2Learn_ShimmerAPI.IMU.Android; // ShimmerLogAndStreamAndroidBluetoothV2
+using ShimmerSDK.Android;
 
 namespace Com.Example.ShimmerBridge
 {

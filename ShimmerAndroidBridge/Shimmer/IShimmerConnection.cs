@@ -1,9 +1,18 @@
-﻿#if ANDROID
+﻿/*
+ * Android-only transport interface for ShimmerBluetooth.
+ * Provides a minimal, stream-like contract (open/close/read/write/flush)
+ * so higher-level SDK code can talk to Shimmer devices without depending
+ * on Android Bluetooth APIs directly.
+ *
+ * Implemented by: AndroidBluetoothConnection.
+ * Consumed by:    ShimmerBluetoothTransport (wires SDK logic to this transport).
+ */
+
+#if ANDROID
 using System.IO;
 
-namespace XR2Learn_ShimmerAPI.IMU.Android
+namespace ShimmerSDK.Android
 {
-    /// <summary>Astrazione di trasporto per ShimmerBluetooth (solo Android).</summary>
     internal interface IShimmerConnection
     {
         bool IsOpen { get; }
