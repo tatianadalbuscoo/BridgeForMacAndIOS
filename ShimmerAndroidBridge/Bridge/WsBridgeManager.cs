@@ -1,4 +1,9 @@
-﻿
+﻿/*
+ * Shimmer WebSocket Bridge (Android)
+ * Hosts a WS server and manages one Bluetooth SPP session per Shimmer MAC.
+ * Applies IMU/EXG config (with board auto-detect), streams samples as JSON,
+ * locks EXG mode post-connect, and handles client subscriptions per MAC.
+ */
 
 
 using System.Collections.Concurrent;
@@ -808,21 +813,22 @@ namespace ShimmerBridgeMangager
                     iTs = SafeIdx(oc, ShimmerConfiguration.SignalNames.SYSTEM_TIMESTAMP, "CAL");
 
                 // EXG
+                const string EXG_FMT = "CAL";
+
                 if (_currentCfg.EnableExg1 && iExg1 == -1)
                     iExg1 = TryIdx(oc,
-                        ("EXG_CH1", "CAL"), ("EXG1_CH1", "CAL"), ("EXG1 CH1", "CAL"), ("EXG CH1", "CAL"),
-                        ("ECG_CH1", "CAL"), ("EMG_CH1", "CAL"),
-                        ("ECG LA-RA", "CAL"), ("ECG RA-LL", "CAL"),
-                        ("EXG_CH1", "RAW"), ("EXG1_CH1", "RAW"), ("EXG1 CH1", "RAW")
+                        ("EXG_CH1", EXG_FMT),
+                        (Shimmer3Configuration.SignalNames.EXG1_CH1, EXG_FMT),
+                        ("ECG_CH1", EXG_FMT), ("ECG CH1", EXG_FMT), ("EMG_CH1", EXG_FMT), ("EMG CH1", EXG_FMT),
+                        ("ECG RA-LL", EXG_FMT), ("ECG LL-RA", EXG_FMT)
                     );
 
                 if (_currentCfg.EnableExg2 && iExg2 == -1)
                     iExg2 = TryIdx(oc,
-                        ("EXG_CH2", "CAL"), ("EXG2_CH1", "CAL"), ("EXG2 CH1", "CAL"), ("EXG CH2", "CAL"),
-                        ("ECG_CH2", "CAL"), ("EMG_CH2", "CAL"),
-                        ("ECG LA-RA", "CAL"), ("ECG RA-LA", "CAL"),
-                        ("RESP", "CAL"), ("Respiration", "CAL"),
-                        ("EXG_CH2", "RAW"), ("EXG2_CH1", "RAW"), ("EXG2 CH1", "RAW")
+                        ("EXG_CH2", EXG_FMT),
+                        (Shimmer3Configuration.SignalNames.EXG2_CH1, EXG_FMT),
+                        ("ECG_CH2", EXG_FMT), ("ECG CH2", EXG_FMT), ("EMG_CH2", EXG_FMT), ("EMG CH2", EXG_FMT),
+                        ("ECG LA-RA", EXG_FMT)
                     );
 
                 // IMU
@@ -924,8 +930,17 @@ namespace ShimmerBridgeMangager
             /// <summary>
             /// Creates a new Shimmer SPP session bound to the specified device and callbacks.
             /// </summary>
-            /// <param name="mac">Bluetooth MAC address of the target device.</param>
-            /// <param name="broadcast">Callback used to publish JSON payloads to WS subscri
+            /// <param name="mac">
+            /// Bluetooth MAC address of the target device. The value is normalized (trimmed) and
+            /// must refer to a previously bonded Shimmer node.
+            /// </param>
+            /// <param name="broadcast">
+            /// Callback used to publish pre-serialized JSON payloads to WebSocket subscribers.
+            /// The delegate is invoked as <c>(mac, json)</c> for each outgoing message.
+            /// </param>
+            /// <param name="log">
+            /// Session-level diagnostic logger invoked with human-readable messages (info/warn/error).
+            /// </param>
             public SppSession(string mac, Action<string, string> broadcast, Action<string> log)
             {
                 _mac = (mac ?? string.Empty).Trim();
@@ -1043,12 +1058,12 @@ namespace ShimmerBridgeMangager
                         }
                         else
                         {
-                            _log("[CFG] Board detection: Unknown → uso flags richiesti");
+                            _log("[CFG] Board detection: Unknown → using requested flags");
                         }
                     }
                     else
                     {
-                        _log("[CFG] Board detection failed → uso flags richiesti");
+                        _log("[CFG] Board detection failed → using requested flags");
                     }
                 }
                 catch {}
@@ -1090,6 +1105,14 @@ namespace ShimmerBridgeMangager
                 // Apply sensor bitmap
                 _core.WriteSensors(BuildMask());
                 await Task.Delay(350);
+
+                try { _core.Inquiry(); } catch { }
+                await Task.Delay(300);
+                try { _core.ReadCalibrationParameters("All"); } catch { }
+                await Task.Delay(220);
+
+                ResetIndices();
+                _tsBase = null;
 
                 // Clear cached indices (labels can change with new mask)
                 ResetIndices();
@@ -1161,7 +1184,7 @@ namespace ShimmerBridgeMangager
                             if (tsAbs.HasValue)
                             {
                                 if (!_tsBase.HasValue) _tsBase = tsAbs.Value;
-                                tsRel = tsAbs.Value - _tsBase.Value; // stesse unità di tsAbs
+                                tsRel = tsAbs.Value - _tsBase.Value;
                             }
 
                             // ---- Read sensor values ----
@@ -1196,12 +1219,10 @@ namespace ShimmerBridgeMangager
                                 map["exg_mode"] = _currentCfg.ExgModeWire;
 
                             bool hasExg = (_currentCfg.EnableExg1 && iExg1 >= 0) || (_currentCfg.EnableExg2 && iExg2 >= 0) || ex1.HasValue || exg2.HasValue;
-                                var exg1 = ex1 ?? 0.0;
-                                var ex2 = exg2 ?? 0.0;
-                                map["Exg1"] = ex1;
-                                map["Exg2"] = ex2;
+                            map["Exg1"] = ex1 ?? 0.0;
+                            map["Exg2"] = exg2 ?? 0.0;
 
-                            // IMU nested blocks
+                            // IMU blocks are added only if the corresponding sensors are enabled
                             if (_currentCfg.EnableLowNoiseAccelerometer || _currentCfg.EnableWideRangeAccelerometer ||
                                 _currentCfg.EnableGyroscope || _currentCfg.EnableMagnetometer ||
                                 _currentCfg.EnablePressureTemperature || _currentCfg.EnableBattery ||
@@ -1238,22 +1259,34 @@ namespace ShimmerBridgeMangager
 
                             }
 
+                            // Fan-out to WS subscribers
                             _broadcast(_mac, JsonSerializer.Serialize(map));
                         }
                     }
-                    catch { /* ignore */ }
+                    catch {}
                 };
 
+                // Subscribe handler and start firmware stream
                 _core.UICallback += _handler;
                 _core.StartStreaming();
             }
 
+
+            /// <summary>
+            /// Stops the current streaming session: unsubscribes the packet handler
+            /// and sends a stop command to the device.
+            /// </summary>
             public void Stop()
             {
                 try { if (_core != null && _handler != null) _core.UICallback -= _handler; } catch { }
                 try { _core?.StopStreaming(); } catch { }
             }
 
+
+            /// <summary>
+            /// Releases resources held by this session: stops streaming (if active),
+            /// disconnects the underlying Bluetooth link, and clears the core handle.
+            /// </summary>
             public void Dispose()
             {
                 Stop();
@@ -1261,19 +1294,53 @@ namespace ShimmerBridgeMangager
                 _core = null;
             }
 
+
+            /// <summary>
+            /// Safely resolves the index of a signal in an <see cref="ObjectCluster"/> by name/format.
+            /// Returns -1 if the label is missing or the call throws.
+            /// </summary>
+            /// <param name="oc">The Shimmer packet container.</param>
+            /// <param name="name">Signal label (e.g., "Gyroscope X").</param>
+            /// <param name="fmt">Format key (e.g., "CAL" or "RAW").</param>
+            /// <returns>The zero-based index if found; otherwise -1.</returns>
             static int SafeIdx(ObjectCluster oc, string name, string fmt)
             {
                 try { return oc.GetIndex(name, fmt); } catch { return -1; }
             }
+
+
+            /// <summary>
+            /// Safely retrieves a sensor datum by index from an <see cref="ObjectCluster"/>.
+            /// Returns <c>null</c> if the index is invalid or access throws.
+            /// </summary>
+            /// <param name="oc">The Shimmer packet container.</param>
+            /// <param name="idx">Index previously obtained via <see cref="SafeIdx"/>.</param>
+            /// <returns>The <see cref="SensorData"/> if available; otherwise <c>null</c>.</returns>
             static SensorData? SafeGet(ObjectCluster oc, int idx)
             {
                 try { return idx >= 0 ? oc.GetData(idx) : null; } catch { return null; }
             }
+
+
+            /// <summary>
+            /// Converts a <see cref="SensorData"/> value to <see cref="double"/> when possible.
+            /// Returns <c>null</c> on conversion errors or when the input is <c>null</c>.
+            /// </summary>
+            /// <param name="s">The sensor data to convert.</param>
+            /// <returns>The numeric value, or <c>null</c> if unavailable.</returns>
             static double? Val(SensorData? s)
             {
                 try { return s == null ? (double?)null : Convert.ToDouble(s.Data); }
                 catch { return null; }
             }
+
+
+            /// <summary>
+            /// Determines whether a state object from the Shimmer callback represents a connected state.
+            /// Accepts multiple shapes (int, Java Integer, string with "CONNECTED").
+            /// </summary>
+            /// <param name="o">The state object provided by the callback.</param>
+            /// <returns><c>true</c> if the device is connected; otherwise <c>false</c>.</returns>
             static bool IsConnectedState(object? o)
             {
                 if (o == null) return false;
@@ -1287,7 +1354,14 @@ namespace ShimmerBridgeMangager
                 catch { return false; }
             }
 
-            // --- helper EXG/IMU: prova più alias dei label ---
+
+            /// <summary>
+            /// Tries multiple (name, format) label candidates and returns the first matching index.
+            /// Useful to handle firmware/label variations across builds.
+            /// </summary>
+            /// <param name="oc">The Shimmer packet container.</param>
+            /// <param name="cands">Candidate tuples of signal name and format (e.g., ("Gyroscope X","CAL")).</param>
+            /// <returns>The index of the first match; otherwise -1.</returns>
             static int TryIdx(ObjectCluster oc, params (string name, string fmt)[] cands)
             {
                 foreach (var (n, f) in cands)
@@ -1299,7 +1373,14 @@ namespace ShimmerBridgeMangager
             }
         }
 
-        // helper
+
+        /// <summary>
+        /// Decide whether a bonded Bluetooth device looks like a Shimmer node.
+        /// Checks common name prefixes and the vendor MAC OUI.
+        /// </summary>
+        /// <param name="name">Device advertised name.</param>
+        /// <param name="mac">Device MAC address.</param>
+        /// <returns><c>true</c> if it likely is a Shimmer; otherwise <c>false</c>.</returns>
         static bool LooksLikeShimmer(string? name, string? mac)
         {
             var n = (name ?? "").ToUpperInvariant();
@@ -1310,6 +1391,14 @@ namespace ShimmerBridgeMangager
             return false;
         }
 
+
+        /// <summary>
+        /// Sends a JSON text message to a specific WebSocket client, swallowing transport errors
+        /// and logging them instead of throwing.
+        /// </summary>
+        /// <param name="clientId">Target client identifier.</param>
+        /// <param name="json">UTF-8 JSON payload to send.</param>
+        /// <returns>A task that completes when the send is attempted.</returns>
         private Task SafeSend(Guid clientId, string json)
         {
             if (_ws == null) return Task.CompletedTask;
@@ -1324,6 +1413,14 @@ namespace ShimmerBridgeMangager
             }
         }
 
+
+        /// <summary>
+        /// Returns the local IPv4 address of the Android Wi-Fi interface in dotted-quad notation.
+        /// </summary>
+        /// <param name="activity">
+        /// Current Android <see cref="Activity"/> to access the Wi-Fi service and query the current connection info.
+        /// </param>
+        /// <returns>The local IPv4 address (e.g., "192.168.1.23"), or "0.0.0.0" if unavailable.</returns>
         static string GetLocalIp(Activity activity)
         {
             var wm = (WifiManager?)activity.ApplicationContext.GetSystemService(Activity.WifiService);
@@ -1332,7 +1429,14 @@ namespace ShimmerBridgeMangager
             return ((ip) & 0xFF) + "." + ((ip >> 8) & 0xFF) + "." + ((ip >> 16) & 0xFF) + "." + ((ip >> 24) & 0xFF);
         }
 
+
+        /// <summary>
+        /// Decodes a UTF-8 string from a given byte segment without extra copying.
+        /// </summary>
+        /// <param name="seg">The byte segment containing UTF-8 text.</param>
+        /// <returns>The decoded string.</returns>
         static string GetString(ArraySegment<byte> seg) =>
             Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count);
+
     }
 }
