@@ -10,7 +10,7 @@
 
 		<!-- App metadata -->
 		<ApplicationTitle>Shimmer Android Bridge</ApplicationTitle>
-		<ApplicationId>com.example.shimmerbridge.cs</ApplicationId>
+		<ApplicationId>ShimmerBridge</ApplicationId>
 		<ApplicationVersion>3</ApplicationVersion>
 		<ApplicationDisplayVersion>1.0.2</ApplicationDisplayVersion>
 
