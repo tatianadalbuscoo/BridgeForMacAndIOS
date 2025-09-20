@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using STimers = System.Timers;
-using Com.Example.ShimmerBridge;
+using ShimmerBridgeMangager;
 using ShimmerBridgeScan;
 using Android.Graphics;
 using Android.Graphics.Drawables;

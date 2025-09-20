@@ -1,30 +1,34 @@
-﻿using System;
+﻿
+
+
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using System.Net.WebSockets;
 using Android.Bluetooth;
 using Android.Net.Wifi;
 using WatsonWebsocket;
-using ShimmerSDK; // for ShimmerScanManager
 using ShimmerSDK.Android;
 using ShimmerAPI;
 using Activity = Android.App.Activity;
 using System.Text.Json.Serialization;
 using ShimmerBridgeScan;
 
-namespace Com.Example.ShimmerBridge
+namespace ShimmerBridgeMangager
 {
-    // Modalità EXG (se vuoi distinguere UI lato client)
+
+    // Operating modes for the Shimmer EXG.
     public enum ExgMode { None, ECG, EMG, ExgTest, Respiration }
 
-    // Config sensori (SR opzionale)
+
+    /// <summary>
+    /// Shimmer sensor configuration (IMU, EXG).
+    /// Set the flags to enable/disable individual sensor blocks.
+    /// </summary>
     public sealed class ShimmerConfig
     {
-        // IMU flags
+
+        // --- IMU flags ---
         public bool EnableLowNoiseAccelerometer { get; set; }
         public bool EnableWideRangeAccelerometer { get; set; }
         public bool EnableGyroscope { get; set; }
@@ -34,18 +38,27 @@ namespace Com.Example.ShimmerBridge
         public bool EnableExtA6 { get; set; }
         public bool EnableExtA7 { get; set; }
         public bool EnableExtA15 { get; set; }
-
         public double? SamplingRate { get; set; }
 
-        // --- EXG ---
-        public bool EnableExg1 { get; set; }   // EXG1 CH1/CH2
-        public bool EnableExg2 { get; set; }   // EXG2 CH1/CH2
-        public bool ExgUse16Bit { get; set; }  // false -> 24-bit (default)
+        // --- EXG flags ---
+        public bool EnableExg1 { get; set; }   
+        public bool EnableExg2 { get; set; }   
+        public bool ExgUse16Bit { get; set; }  // false -> 24-bit
 
-        [JsonIgnore] // <-- evita serializzazione numerica del campo enum
+
+        [JsonIgnore]    // Avoid numeric enum in JSON
         public ExgMode ExgMode { get; set; } = ExgMode.None;
 
-        // wire name <-> enum (nessun default)
+
+        /// <summary>
+        /// JSON wire representation of <see cref="ExgMode"/>.
+        /// </summary>
+        /// <value>
+        /// Getter: returns <c>"ecg"</c>, <c>"emg"</c>, <c>"test"</c>, or <c>"resp"</c> for the current mode,
+        /// or <c>null</c> when no mode is selected.
+        /// Setter: parses those strings (case/format insensitive) and updates <see cref="ExgMode"/>; 
+        /// blank or unknown values reset it to <see cref="ExgMode.None"/>.
+        /// </value>
         [JsonPropertyName("exg_mode")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ExgModeWire
@@ -77,23 +90,51 @@ namespace Com.Example.ShimmerBridge
         }
     }
 
+
+    /// <summary>
+    /// WebSocket bridge for Shimmer devices: hosts a WatsonWsServer, manages one Bluetooth SPP session per MAC,
+    /// and broadcasts samples and configuration updates to subscribed clients (server is authoritative over config).
+    /// </summary>
     public sealed class WsBridgeManager : IDisposable
     {
+
+        // Diagnostic message event
         public event Action<string>? Log;
 
+        // WebSocket server instance
         private WatsonWsServer? _ws;
 
-        // sessioni "hardware" attive, 1 per MAC (server-managed)
+        // Active hardware sessions keyed by MAC address (server-managed; one session per MAC).
         private readonly ConcurrentDictionary<string, SppSession> _macSessions =
             new(StringComparer.OrdinalIgnoreCase);
 
-        // sottoscrizioni clientId -> set di MAC
+        // Client subscriptions map: each clientId is associated with the set of MACs it subscribes to.
         private readonly ConcurrentDictionary<Guid, HashSet<string>> _subscriptions = new();
 
+
+        /// <summary>
+        /// Indicates whether the WebSocket server is currently listening.
+        /// </summary>
         public bool IsRunning => _ws?.IsListening ?? false;
+
+
+        /// <summary>
+        /// Number of active hardware sessions currently tracked.
+        /// </summary>
         public int ActiveSessionCount => _macSessions.Count;
 
-        // Stream se almeno un sensore è attivo (EXG o IMU)
+
+        /// <summary>
+        /// Disposes the manager by initiating shutdown of the WebSocket server and all sessions (non-blocking).
+        /// </summary>
+        public void Dispose() => _ = StopAsync();
+
+
+        /// <summary>
+        /// Returns true if at least one sensor block is enabled.
+        /// </summary>
+        /// <param name="c">The sensor configuration to inspect.</param>
+        /// <returns><c>true</c> if any sensor is enabled; otherwise, <c>false</c>.</returns>
         public static bool AnySensorEnabled(ShimmerConfig c) =>
             c.EnableExg1 || c.EnableExg2 ||
             c.EnableLowNoiseAccelerometer || c.EnableWideRangeAccelerometer ||
@@ -101,8 +142,18 @@ namespace Com.Example.ShimmerBridge
             c.EnablePressureTemperature || c.EnableBattery ||
             c.EnableExtA6 || c.EnableExtA7 || c.EnableExtA15;
 
+
+        /// <summary>
+        /// Starts the WebSocket server on the device's local Wi-Fi IP and wires up connection/message handlers.
+        /// If the server is already running, the call is a no-op.
+        /// </summary>
+        /// <param name="activity">Android activity used to resolve the Wi-Fi service and local IP.</param>
+        /// <param name="port">TCP port for the WebSocket server (default: 8787).</param>
+        /// <returns>A completed task once the server is started or already running.</returns>
         public Task StartAsync(Activity activity, int port = 8787)
         {
+
+            // no-op if already started
             if (IsRunning) return Task.CompletedTask;
 
             string ip = GetLocalIp(activity);
@@ -111,43 +162,66 @@ namespace Com.Example.ShimmerBridge
             _ws.ClientConnected += (s, e) =>
             {
                 Log?.Invoke($"WS client {e.Client.Guid} connected");
+
+                // init empty subscription set
                 _subscriptions.TryAdd(e.Client.Guid, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             };
 
             _ws.ClientDisconnected += (s, e) =>
             {
                 Log?.Invoke($"WS client {e.Client.Guid} disconnected");
+
+                // cleanup subscriptions
                 _subscriptions.TryRemove(e.Client.Guid, out _);
             };
 
+            // route messages to handler
             _ws.MessageReceived += OnMessage;
 
+            // start listening
             _ws.Start();
             Log?.Invoke($"WS on ws://{ip}:{port}/");
             return Task.CompletedTask;
         }
 
+
+        /// <summary>
+        /// Stops the WebSocket server and disposes resources; also closes all active device sessions.
+        /// </summary>
+        /// <returns>A task that completes when sessions are closed and the server is stopped.</returns>
         public async Task StopAsync()
         {
+
+            // close and dispose all active SPP sessions
             await CloseAllAsync();
             if (_ws != null)
             {
                 try { _ws.Stop(); } catch { }
+
+                // release server resources
                 _ws.Dispose();
+
+                // mark as not running
                 _ws = null;
             }
             Log?.Invoke("WS stopped");
         }
 
-        public void Dispose() => _ = StopAsync();
 
-        // ====== SERVER UI: open + config + start su un MAC (decide il server) ======
+        /// <summary>
+        /// Opens a Bluetooth SPP session for the given MAC, applies the requested configuration
+        /// (with board auto-detection/adjustments), starts streaming if any sensor is enabled,
+        /// locks EXG mode, and broadcasts the effective config to subscribers.
+        /// </summary>
+        /// <param name="mac">Target device Bluetooth MAC address (bonded).</param>
+        /// <param name="cfg">Desired sensor configuration; may be adjusted based on detected board.</param>
+        /// <returns>A task that completes when the session is opened, configured, and (optionally) started.</returns>
         public async Task OpenConfigureAndStartAsync(string mac, ShimmerConfig cfg)
         {
             mac = (mac ?? "").Trim();
             if (mac.Length == 0) return;
 
-            // Chiudi eventuale precedente
+            // Close any previous session for this MAC
             if (_macSessions.TryRemove(mac, out var old))
             {
                 try { old.Dispose(); } catch { }
@@ -155,31 +229,41 @@ namespace Com.Example.ShimmerBridge
 
             var sess = new SppSession(
                 mac,
-                broadcast: (m, json) => BroadcastToSubscribers(m, json),
+                broadcast: (m, json) => BroadcastToSubscribers(m, json),    // Fan-out JSON to subscribed clients
                 log: msg => Log?.Invoke(msg)
             );
 
-            // logga PRIMA di applicare (scelta utente)
+            // Log requested EXG mode (before applying)
             Log?.Invoke($"[SERVER] requested exg_mode (wire)='{cfg.ExgModeWire ?? "null"}' enum={cfg.ExgMode}");
 
-            await sess.OpenAsync();
-            await sess.ApplyConfigAsync(cfg);   // auto-config IMU/EXG secondo board
+            await sess.OpenAsync();             // Connect SPP
+            await sess.ApplyConfigAsync(cfg);   // Apply config (auto-config IMU/EXG per board)
 
-            // logga DOPO l'applicazione (effettiva)
+            // Log effective EXG mode (after applying)
             var applied = sess.CurrentConfig;
             Log?.Invoke($"[SERVER] applied   exg_mode (wire)='{applied.ExgModeWire ?? "null"}' enum={applied.ExgMode}");
 
+            // start streaming only if something is enabled
             if (AnySensorEnabled(sess.CurrentConfig)) sess.Start();
 
+            // prevent EXG mode changes after connect
             sess.LockMode();
-            _macSessions[mac] = sess;
+            _macSessions[mac] = sess;    // Track session
 
-            // broadcast iniziale della config effettiva (include exg_mode)
+            // Initial broadcast of effective configuration (includes exg_mode and enabled blocks)
             await BroadcastToSubscribers(mac, JsonSerializer.Serialize(
             new { type = "config_changed", mac, cfg = sess.CurrentConfig, available = sess.EnabledBlocks() }));
         }
 
-        // === Update live della configurazione sensori per un MAC attivo
+
+        /// <summary>
+        /// Live-reconfigures sensors for an active device session (EXG mode stays locked after connect).
+        /// Stops streaming, applies the new flags/sampling rate, then restarts if any sensor is enabled,
+        /// and broadcasts the effective configuration to subscribers.
+        /// </summary>
+        /// <param name="mac">Target device Bluetooth MAC address.</param>
+        /// <param name="cfg">Requested configuration; EXG mode will be preserved from the current session.</param>
+        /// <returns>A task that completes after the session is reconfigured and notifications are sent.</returns>
         public async Task UpdateConfigAsync(string mac, ShimmerConfig cfg)
         {
             mac = (mac ?? "").Trim();
@@ -189,18 +273,20 @@ namespace Com.Example.ShimmerBridge
             {
                 Log?.Invoke($"[SERVER] update requested exg_mode (wire)='{cfg.ExgModeWire ?? "null"}' enum={cfg.ExgMode} (mode lock={sess.IsModeLocked})");
 
-                // non permettere di toccare ExgMode dopo il connect
+                // Don't allow touching ExgMode after connect
                 cfg.ExgMode = sess.CurrentConfig.ExgMode;
 
+                // Pause streaming to reconfigure safely
                 try { sess.Stop(); } catch { }
-                await sess.ApplyConfigAsync(cfg);
+                await sess.ApplyConfigAsync(cfg);   // apply new flags / SR
 
                 var applied2 = sess.CurrentConfig;
                 Log?.Invoke($"[SERVER] update applied  exg_mode (wire)='{applied2.ExgModeWire ?? "null"}' enum={applied2.ExgMode}");
 
+                // resume only if something is enabled
                 if (AnySensorEnabled(sess.CurrentConfig)) sess.Start();
 
-                // manda la config effettivamente applicata (include exg_mode)
+                // notify subscribers with the effective config + enabled blocks
                 var msg = new { type = "config_changed", mac, cfg = sess.CurrentConfig, available = sess.EnabledBlocks() };
                 await BroadcastToSubscribers(mac, JsonSerializer.Serialize(msg));
 
@@ -212,74 +298,39 @@ namespace Com.Example.ShimmerBridge
             }
         }
 
-        public async Task<bool> SetExgModeAsync(string mac, string mode)
-        {
-            mac = (mac ?? "").Trim();
-            if (mac.Length == 0) return false;
 
-            if (_macSessions.TryGetValue(mac, out var sess))
-            {
-                var m = (mode ?? "").Trim().ToLowerInvariant();
-                ExgMode em = m switch
-                {
-                    "ecg" => ExgMode.ECG,
-                    "emg" => ExgMode.EMG,
-                    "test" or "exgtest" or "exg_test" => ExgMode.ExgTest,
-                    "resp" or "respiration" => ExgMode.Respiration,
-                    _ => sess.CurrentConfig.ExgMode
-                };
-
-                bool ok = await sess.SetExgModeAsync(em); // viene ignorato se la sessione è "mode locked"
-                if (ok)
-                {
-                    var cfg = sess.CurrentConfig;
-                    await BroadcastToSubscribers(mac, JsonSerializer.Serialize(
-                    new { type = "config_changed", mac, cfg, available = sess.EnabledBlocks() }));
-                }
-                return ok;
-            }
-            return false;
-        }
-
-        // === chiusura di una singola sessione
-        public Task CloseAsync(string mac)
-        {
-            mac = (mac ?? "").Trim();
-            if (mac.Length == 0) return Task.CompletedTask;
-
-            if (_macSessions.TryRemove(mac, out var old))
-            {
-                try { old.Dispose(); } catch { }
-                var msg = new { type = "closed", mac };
-                return BroadcastToSubscribers(mac, JsonSerializer.Serialize(msg));
-            }
-            return Task.CompletedTask;
-        }
-
-        public Task StopAllStreamingAsync()
-        {
-            foreach (var s in _macSessions.Values) { try { s.Stop(); } catch { } }
-            Log?.Invoke("[SERVER] All streams stopped");
-            return Task.CompletedTask;
-        }
-
+        /// <summary>
+        /// Disposes and removes all active device sessions, without touching the WebSocket server.
+        /// Safe to call multiple times.
+        /// </summary>
+        /// <returns>A completed task after all sessions are closed and cleared.</returns>
         public Task CloseAllAsync()
         {
             foreach (var s in _macSessions.Values) { try { s.Dispose(); } catch { } }
+
+            // drop session map
             _macSessions.Clear();
             Log?.Invoke("[SERVER] All sessions closed");
             return Task.CompletedTask;
         }
 
-        // ====== WS handler ======
+
+        /// <summary>
+        /// WebSocket message handler: dispatches text frames to <see cref="HandleTextAsync"/> and logs errors.
+        /// Note: uses <c>async void</c> because it's an event handler (fire-and-forget).
+        /// </summary>
+        /// <param name="sender">The WebSocket server raising the event.</param>
+        /// <param name="e">Message event data (includes client GUID, message type, and payload).</param>
         private async void OnMessage(object? sender, MessageReceivedEventArgs e)
         {
             try
             {
+
+                // handle only text frames
                 if (e.MessageType == WebSocketMessageType.Text)
                 {
-                    var txt = GetString(e.Data);
-                    await HandleTextAsync(e.Client.Guid, txt);
+                    var txt = GetString(e.Data);                    // UTF-8 decode
+                    await HandleTextAsync(e.Client.Guid, txt);      // route to JSON command handler
                 }
             }
             catch (Exception ex)
@@ -288,6 +339,17 @@ namespace Com.Example.ShimmerBridge
             }
         }
 
+
+        /// <summary>
+        /// Sends a one-shot configuration snapshot for the specified MAC to a single client.
+        /// Includes the effective config and the list of enabled blocks.
+        /// </summary>
+        /// <param name="clientId">Target WebSocket client GUID.</param>
+        /// <param name="mac">Device MAC address whose configuration to send.</param>
+        /// <returns>
+        /// A task that completes after the snapshot is queued for send;
+        /// returns a completed task if the MAC is not active.
+        /// </returns>
         private Task SendConfigSnapshot(Guid clientId, string mac)
         {
             if (_macSessions.TryGetValue(mac, out var sess))
@@ -295,11 +357,23 @@ namespace Com.Example.ShimmerBridge
                 var cfg = sess.CurrentConfig;
                 return SendJson(clientId, new { type = "config_changed", mac, cfg, available = sess.EnabledBlocks() });
             }
+
+            // No active session for this MAC
             return Task.CompletedTask;
         }
 
+
+        /// <summary>
+        /// Handles a single client JSON command: parses the message type and routes to the appropriate action,
+        /// replying with typed ACKs and broadcasting updates when needed.
+        /// </summary>
+        /// <param name="clientId">The GUID of the WebSocket client sending the command.</param>
+        /// <param name="json">Raw JSON command payload.</param>
+        /// <returns>A task that completes after the command is processed and responses are queued.</returns>
         private async Task HandleTextAsync(Guid clientId, string json)
         {
+
+            // parse JSON
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
@@ -316,6 +390,8 @@ namespace Com.Example.ShimmerBridge
 
                 case "list_devices":
                     {
+
+                        // Enumerate already bonded BT devices that look like Shimmer
                         var items = BluetoothAdapter.DefaultAdapter?.BondedDevices?
                             .Select(d => new { name = d?.Name ?? "?", mac = d?.Address ?? "" })
                             .Where(d => LooksLikeShimmer(d.name, d.mac))
@@ -326,6 +402,8 @@ namespace Com.Example.ShimmerBridge
 
                 case "list_active":
                     {
+
+                        // Report active sessions (MACs) managed by the server
                         var items = _macSessions.Keys.OrderBy(m => m).ToArray();
                         await SendJson(clientId, new { type = "active_devices", macs = items });
                         break;
@@ -333,6 +411,8 @@ namespace Com.Example.ShimmerBridge
 
                 case "set_exg_mode":
                     {
+
+                        // EXG mode is server-managed / locked post-connect
                         await SendJson(clientId, new { type = "set_exg_mode_ack", ok = false, error = "server_managed" });
                         break;
                     }
@@ -354,6 +434,8 @@ namespace Com.Example.ShimmerBridge
 
                 case "set_sampling_rate":
                     {
+
+                        // Validate args
                         string mac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
                         double sr = (root.TryGetProperty("sr", out var psr) && psr.ValueKind == JsonValueKind.Number)
                                     ? psr.GetDouble() : double.NaN;
@@ -368,10 +450,10 @@ namespace Com.Example.ShimmerBridge
                         {
                             double applied = await sess.SetSamplingRateAsync(sr);
 
-                            // ACK puntuale al chiamante
+                            // Direct ACK to caller with requested vs applied rate
                             await SendJson(clientId, new { type = "set_sampling_rate_ack", ok = true, mac, requested = sr, applied });
 
-                            // broadcast per i subscriber (config aggiornata)
+                            // Notify subscribers with updated config
                             var cfg = sess.CurrentConfig;
                             await BroadcastToSubscribers(mac, JsonSerializer.Serialize(new { type = "config_changed", mac, cfg }));
                         }
@@ -384,6 +466,8 @@ namespace Com.Example.ShimmerBridge
 
                 case "open":
                     {
+
+                        // Subscribe to a device MAC and send initial snapshot (+ retry)
                         string mac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
 
                         if (string.IsNullOrEmpty(mac))
@@ -396,7 +480,7 @@ namespace Com.Example.ShimmerBridge
                         {
                             Subscribe(clientId, mac);
                             await SendJson(clientId, new { type = "open_ack", ok = true, mac, mode = "subscribed" });
-                            await SendConfigSnapshot(clientId, mac);
+                            await SendConfigSnapshot(clientId, mac);    // Resend to mitigate timing/race on client
 
                             _ = Task.Run(async () => {
                                 try
@@ -418,17 +502,21 @@ namespace Com.Example.ShimmerBridge
                 case "unsubscribe":
                     {
                         string mac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
-                        Unsubscribe(clientId, mac);
+                        Unsubscribe(clientId, mac);     // Remove MAC from the client's subscription set
                         await SendJson(clientId, new { type = "unsubscribe_ack", ok = true, mac });
                         break;
                     }
 
                 case "set_config":
+
+                    // Configuration is server-managed; clients cannot push arbitrary configs
                     await SendJson(clientId, new { type = "config_ack", ok = false, error = "server_managed" });
                     break;
 
                 case "start":
                     {
+
+                        // Server-managed start; treat as subscribe + snapshot
                         string smac = root.TryGetProperty("mac", out var pm) ? (pm.GetString() ?? "").Trim() : "";
                         if (smac.Length > 0 && _macSessions.ContainsKey(smac))
                         {
@@ -456,21 +544,33 @@ namespace Com.Example.ShimmerBridge
                     }
 
                 case "stop":
+
+                    // Stopping is server-managed; client gets an ACK but no action is taken here
                     await SendJson(clientId, new { type = "stop_ack", ok = false, error = "server_managed" });
                     break;
 
                 case "close":
+
+                    // client requests to tear down its WS-side subscription state
                     _subscriptions.TryRemove(clientId, out _);
                     await SendJson(clientId, new { type = "close_ack", ok = true });
                     break;
 
                 default:
+
+                    // Unknown command
                     await SendJson(clientId, new { type = "error", error = "unknown_type" });
                     break;
             }
         }
 
-        // ====== helper: leggere config corrente
+
+        /// <summary>
+        /// Attempts to read the current configuration for the specified MAC from the active session map.
+        /// </summary>
+        /// <param name="mac">Device Bluetooth MAC address.</param>
+        /// <param name="cfg">On success, receives the effective <see cref="ShimmerConfig"/>; otherwise a new default instance.</param>
+        /// <returns><c>true</c> if a session exists for the MAC; otherwise, <c>false</c>.</returns>
         private bool TryGetConfig(string mac, out ShimmerConfig cfg)
         {
             cfg = new ShimmerConfig();
@@ -482,23 +582,41 @@ namespace Com.Example.ShimmerBridge
             return false;
         }
 
-        // ====== sottoscrizioni e broadcast ======
+
+        /// <summary>
+        /// Subscribes a client to updates for a given device MAC (enables receiving samples/config events).
+        /// </summary>
+        /// <param name="clientId">WebSocket client GUID.</param>
+        /// <param name="mac">Device MAC to subscribe to.</param>
         private void Subscribe(Guid clientId, string mac)
         {
             var set = _subscriptions.GetOrAdd(clientId, _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-            lock (set) set.Add(mac);
+            lock (set) set.Add(mac);     // Thread-safe add
             Log?.Invoke($"WS [{clientId}] subscribed {mac}");
         }
 
+
+        /// <summary>
+        /// Unsubscribes a client from a given device MAC (stops updates for that device).
+        /// </summary>
+        /// <param name="clientId">WebSocket client GUID.</param>
+        /// <param name="mac">Device MAC to unsubscribe from.</param>
         private void Unsubscribe(Guid clientId, string mac)
         {
             if (_subscriptions.TryGetValue(clientId, out var set))
             {
-                lock (set) set.Remove(mac);
+                lock (set) set.Remove(mac);     // Thread-safe remove
             }
             Log?.Invoke($"WS [{clientId}] unsubscribed {mac}");
         }
 
+
+        /// <summary>
+        /// Broadcasts a JSON payload to all clients subscribed to the specified device MAC.
+        /// </summary>
+        /// <param name="mac">Device MAC whose subscribers should receive the message.</param>
+        /// <param name="json">Pre-serialized JSON payload to send.</param>
+        /// <returns>A task that completes when all sends are awaited.</returns>
         private async Task BroadcastToSubscribers(string mac, string json)
         {
             if (_ws == null) return;
@@ -509,19 +627,31 @@ namespace Com.Example.ShimmerBridge
                 var clientId = kv.Key;
                 var set = kv.Value;
                 bool send;
-                lock (set) send = set.Contains(mac);
-                if (send) tasks.Add(SafeSend(clientId, json));
+
+                // Send only to clients subscribed to this MAC
+                lock (set) send = set.Contains(mac);    
+                if (send) tasks.Add(SafeSend(clientId, json));  // Enqueue send
             }
 
-            try { await Task.WhenAll(tasks); }
+            try { await Task.WhenAll(tasks); }                  // Await all sends
             catch (Exception ex)
             {
                 Log?.Invoke($"Broadcast error: {ex.Message}");
             }
         }
 
+
+        /// <summary>
+        /// Serializes an object to JSON and sends it to a single client.
+        /// No-op if the WebSocket server is not running.
+        /// </summary>
+        /// <param name="id">Target WebSocket client GUID.</param>
+        /// <param name="obj">Object to serialize and send as JSON.</param>
+        /// <returns>A task representing the send operation, or a completed task if server is not running.</returns>
         private Task SendJson(Guid id, object obj)
         {
+
+            // Server not running
             if (_ws == null) return Task.CompletedTask;
             try
             {
@@ -535,21 +665,45 @@ namespace Com.Example.ShimmerBridge
             }
         }
 
-        // ====== sessione HW ======
+
+        /// <summary>
+        /// Manages a single Bluetooth SPP session to a Shimmer device:
+        /// connects/disconnects, applies configuration, resolves channel indices,
+        /// streams samples via the broadcast callback,
+        /// supports sampling-rate changes, and locks EXG mode after connect.
+        /// </summary>
         private sealed class SppSession : IDisposable
         {
+
+            // Target device MAC address
             readonly string _mac;
+
+            // Fan-out callback: (mac, jsonPayload)
             readonly Action<string, string> _broadcast;
+
+            // Session-level diagnostic logger
+
             readonly Action<string> _log;
 
+            // Shimmer Android BT core (SPP)
             ShimmerLogAndStreamAndroidBluetoothV2? _core;
+
+            // Data/event handler registration
             EventHandler? _handler;
 
-            // indici usati
-            int iTs = -1;
+            // Save last applied configuration
+            ShimmerConfig _currentCfg = new ShimmerConfig();
+
+            // Prevents EXG mode changes after connect
+            bool _modeLocked = false;
+
+            // Absolute timestamp of first packet in the session; used to compute per-sample relative time
+            double? _tsBase = null;
+
+            // Resolved indices into ObjectCluster (lazy-filled)
+            int iTs = -1;   // Timestamp 
 
             // EXG
-            //int iExg1Ch1 = -1, iExg1Ch2 = -1, iExg2Ch1 = -1, iExg2Ch2 = -1;
             int iExg1 = -1, iExg2 = -1;
 
             // IMU
@@ -560,14 +714,32 @@ namespace Com.Example.ShimmerBridge
             int iTemp = -1, iPress = -1, iVbatt = -1; // BMP180 Temp/Press, Battery
             int iA6 = -1, iA7 = -1, iA15 = -1;        // Ext ADC
 
+            // Last-known scalar readings
             double? _lastVbatt = null;
             double? _lastA6 = null, _lastA7 = null, _lastA15 = null;
 
-            // memorizza ultima config applicata
-            ShimmerConfig _currentCfg = new ShimmerConfig();
+
+            /// <summary>
+            /// Permanently locks the current EXG mode for this session.
+            /// </summary>
+            public void LockMode() => _modeLocked = true;
+
+
+            /// <summary>
+            /// Gets a value indicating whether the EXG mode is locked for this session.
+            /// </summary>
+            /// <value><c>true</c> if the EXG mode is locked; otherwise, <c>false</c>.</value>
+            public bool IsModeLocked => _modeLocked;
+
+
+            /// <summary>
+            /// Gets a snapshot copy of the session’s effective configuration.
+            /// The returned instance is detached (read-only) so external callers
+            /// cannot mutate the internal state of the ongoing session.
+            /// </summary>
+            /// <return>A new <see cref="ShimmerConfig"/> reflecting the last applied settings.</return>
             public ShimmerConfig CurrentConfig => new ShimmerConfig
             {
-                // IMU flags
                 EnableLowNoiseAccelerometer = _currentCfg.EnableLowNoiseAccelerometer,
                 EnableWideRangeAccelerometer = _currentCfg.EnableWideRangeAccelerometer,
                 EnableGyroscope = _currentCfg.EnableGyroscope,
@@ -586,7 +758,13 @@ namespace Com.Example.ShimmerBridge
                 ExgMode = _currentCfg.ExgMode
             };
 
-                        // Elenco simbolico dei blocchi che il client può mostrare
+
+            /// <summary>
+            /// Builds a symbolic list of enabled data blocks based on the current configuration
+            /// (e.g., <c>"exg"</c>, <c>"lna"</c>, <c>"wra"</c>, <c>"gyro"</c>, <c>"mag"</c>, <c>"temp"</c>, <c>"press"</c>, <c>"vbatt"</c>, <c>"ext"</c>).
+            /// Intended for the client UI to decide which panels/streams to show.
+            /// </summary>
+            /// <returns>A read-only list of short block keys representing enabled sensors.</returns>
             public IReadOnlyList<string> EnabledBlocks()
             {
                 var list = new List<string>();
@@ -601,22 +779,10 @@ namespace Com.Example.ShimmerBridge
                 return list;
             }
 
-    // dentro SppSession
-    bool _modeLocked = false;
-            public void LockMode() => _modeLocked = true;
-            public bool IsModeLocked => _modeLocked;
 
-            public Task<bool> SetExgModeAsync(ExgMode mode)
-            {
-                if (_modeLocked && mode != _currentCfg.ExgMode)
-                {
-                    _log("[CFG] exg_mode change ignored (locked after connect)");
-                    return Task.FromResult(false);
-                }
-                _currentCfg.ExgMode = mode;
-                return Task.FromResult(true);
-            }
-
+            /// <summary>
+            /// Resets all cached channel indices to <c>-1</c> so they will be re-resolved on the next data packet.
+            /// </summary>
             void ResetIndices()
             {
                 iTs = -1;
@@ -629,20 +795,24 @@ namespace Com.Example.ShimmerBridge
                 iA6 = iA7 = iA15 = -1;
             }
 
+
+            /// <summary>
+            /// Lazily resolves any missing channel indices in the given <see cref="ObjectCluster"/>.
+            /// so downstream reads can use fast index-based access instead of repeated lookups.
+            /// Only fills indices that are still <c>-1</c>; existing indices are left untouched.
+            /// </summary>
+            /// <param name="oc">The current Shimmer <see cref="ObjectCluster"/> packet to probe for indices.</param>
             void RefreshMissingIndices(ObjectCluster oc)
             {
                 if (iTs == -1)
                     iTs = SafeIdx(oc, ShimmerConfiguration.SignalNames.SYSTEM_TIMESTAMP, "CAL");
 
-                // === EXG: aggiungi tutti gli alias comuni ===
+                // EXG
                 if (_currentCfg.EnableExg1 && iExg1 == -1)
                     iExg1 = TryIdx(oc,
-                        // underscore + varianti
                         ("EXG_CH1", "CAL"), ("EXG1_CH1", "CAL"), ("EXG1 CH1", "CAL"), ("EXG CH1", "CAL"),
-                        // alias ECG/EMG
                         ("ECG_CH1", "CAL"), ("EMG_CH1", "CAL"),
                         ("ECG LA-RA", "CAL"), ("ECG RA-LL", "CAL"),
-                        // raw fallback
                         ("EXG_CH1", "RAW"), ("EXG1_CH1", "RAW"), ("EXG1 CH1", "RAW")
                     );
 
@@ -651,13 +821,11 @@ namespace Com.Example.ShimmerBridge
                         ("EXG_CH2", "CAL"), ("EXG2_CH1", "CAL"), ("EXG2 CH1", "CAL"), ("EXG CH2", "CAL"),
                         ("ECG_CH2", "CAL"), ("EMG_CH2", "CAL"),
                         ("ECG LA-RA", "CAL"), ("ECG RA-LA", "CAL"),
-                        // opzionale: alcune build mappano la respiration qui
                         ("RESP", "CAL"), ("Respiration", "CAL"),
                         ("EXG_CH2", "RAW"), ("EXG2_CH1", "RAW"), ("EXG2 CH1", "RAW")
                     );
 
-
-                // === IMU (FUORI dall’if EXG!) ===
+                // IMU
                 if (_currentCfg.EnableLowNoiseAccelerometer)
                 {
                     if (iLnaX == -1) iLnaX = TryIdx(oc, ("Low Noise Accelerometer X", "CAL"), ("Accelerometer X", "CAL"), ("LN_ACC_X", "CAL"), ("Low Noise Accelerometer X", "RAW"));
@@ -712,11 +880,17 @@ namespace Com.Example.ShimmerBridge
                         ("External ADC A15", "CAL"), ("Ext ADC A15", "CAL"), ("Ext A15", "CAL"), ("ADC A15", "CAL"), ("Analog A15", "CAL"), ("A15", "CAL"),
                         ("External ADC A15", "RAW"), ("Ext ADC A15", "RAW"), ("Ext A15", "RAW"), ("ADC A15", "RAW"), ("Analog A15", "RAW"), ("A15", "RAW")
                     );
-
-
             }
 
 
+            /// <summary>
+            /// Sets the device sampling rate (in Hz). If streaming is active, it temporarily stops,
+            /// applies the new rate, resets cached indices and timestamp base, updates the current
+            /// configuration, and restarts streaming if at least one sensor is enabled.
+            /// </summary>
+            /// <param name="newHz">Requested sampling rate in Hertz.</param>
+            /// <returns>The applied sampling rate (rounded to an integer, in Hertz).</returns>
+            /// <exception cref="InvalidOperationException">Thrown if the session is not open.</exception>
             public async Task<double> SetSamplingRateAsync(double newHz)
             {
                 if (_core == null) throw new InvalidOperationException("Not open");
@@ -746,9 +920,12 @@ namespace Com.Example.ShimmerBridge
                 return sr;
             }
 
-            // base tempo per ts relativo
-            double? _tsBase = null;
 
+            /// <summary>
+            /// Creates a new Shimmer SPP session bound to the specified device and callbacks.
+            /// </summary>
+            /// <param name="mac">Bluetooth MAC address of the target device.</param>
+            /// <param name="broadcast">Callback used to publish JSON payloads to WS subscri
             public SppSession(string mac, Action<string, string> broadcast, Action<string> log)
             {
                 _mac = (mac ?? string.Empty).Trim();
@@ -756,11 +933,22 @@ namespace Com.Example.ShimmerBridge
                 _log = log;
             }
 
+
+            /// <summary>
+            /// Opens the SPP connection to the Shimmer device and waits until the adapter reports a connected state.
+            /// Ensures streaming is stopped after connect so configuration can be safely applied.
+            /// </summary>
+            /// <returns>A task that completes when the device is connected.</returns>
+            /// <exception cref="InvalidOperationException">Thrown if the connection does not reach a connected state within the timeout.</exception>
             public async Task OpenAsync()
             {
+
+                // init core for target MAC
                 _core = new ShimmerLogAndStreamAndroidBluetoothV2("ShimmerBridge", _mac);
 
                 var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                // Observe state changes and resolve when we see a CONNECTED state.
                 EventHandler stateHandler = (s, e) =>
                 {
                     try
@@ -772,23 +960,39 @@ namespace Com.Example.ShimmerBridge
                                 tcs.TrySetResult(true);
                         }
                     }
-                    catch { }
+                    catch {}
                 };
 
-                _core.UICallback += stateHandler;
-                _core.Connect();
+                _core.UICallback += stateHandler;   // subscribe to state changes
+                _core.Connect();                    // start BT SPP connect
 
+                // Wait for either CONNECTED or timeout (10s).
                 var final = await Task.WhenAny(tcs.Task, Task.Delay(10000));
-                _core.UICallback -= stateHandler;
+                _core.UICallback -= stateHandler;   // always unhook
+
                 if (final != tcs.Task) throw new InvalidOperationException("SPP connect timeout");
+
                 _log($"[BT] Connected to {_mac}");
+
+                // Ensure streaming is stopped after connect; we will (re)start after config.
                 try { _core.StopStreaming(); } catch { }
                 await Task.Delay(150);
             }
 
+
+            /// <summary>
+            /// Applies the requested configuration to the connected Shimmer device:
+            /// locks EXG mode if already frozen, auto-detects board kind (EXG/IMU) to adjust flags,
+            /// writes sampling rate and sensor bitmap, resets cached indices, and stores the
+            /// effective configuration for later reporting.
+            /// </summary>
+            /// <param name="cfg">Desired configuration to apply (may be adjusted based on board detection and lock state).</param>
+            /// <returns>A task that completes when the configuration has been written to the device.</returns>
+            /// <exception cref="InvalidOperationException">Thrown if the session is not open.</exception>
             public async Task ApplyConfigAsync(ShimmerConfig cfg)
             {
-                // se la modalità è già stata “congelata” non permettere override
+
+                // Preserve EXG mode if it was locked after connect
                 if (_modeLocked)
                 {
                     cfg.ExgMode = _currentCfg.ExgMode;
@@ -796,26 +1000,27 @@ namespace Com.Example.ShimmerBridge
 
                 if (_core == null) throw new InvalidOperationException("Not open");
 
-                // === AUTOCONFIG IN BASE ALLA BOARD RILEVATA (IMU vs EXG) ===
+                // Auto-adjust flags based on detected board (EXG vs IMU); keep UI IMU flags on EXG boards
                 try
                 {
                     if (ShimmerScanManager.ShimmerBoardDetector.TryDetectBoardKind(_core, out var kind, out var rawId))
                     {
-                        // DOPO: su EXG rispetta i flag scelti dall’utente per gli IMU.
-                        // Manteniamo solo l’EXG acceso, per garantire ECG/EMG/Resp/Test.
+
                         if (kind == ShimmerScanManager.ShimmerBoardDetector.BoardKind.EXG)
                         {
-                            // EXG acceso (canali principali), profondità 24-bit di default
+
+                            // Ensure EXG is enabled at 24-bit.
                             cfg.EnableExg1 = true;
                             cfg.EnableExg2 = true;
                             cfg.ExgUse16Bit = false;
 
-                            // ⛔ NON toccare i flag IMU: usa quelli della UI (cfg.* così come arrivano)
                             _log($"[CFG] Board={rawId} → HYBRID (EXG on; IMU via UI)");
                         }
 
                         else if (kind == ShimmerScanManager.ShimmerBoardDetector.BoardKind.IMU)
                         {
+
+                            // If user enabled no IMU blocks, enable a sensible default IMU set
                             bool anyImu = cfg.EnableLowNoiseAccelerometer || cfg.EnableWideRangeAccelerometer ||
                                           cfg.EnableGyroscope || cfg.EnableMagnetometer ||
                                           cfg.EnablePressureTemperature || cfg.EnableBattery ||
@@ -830,7 +1035,7 @@ namespace Com.Example.ShimmerBridge
                                 cfg.EnableBattery = true;
                             }
 
-                            // Spegni EXG su board IMU-only
+                            // IMU-only boards: force EXG off
                             cfg.EnableExg1 = false;
                             cfg.EnableExg2 = false;
 
@@ -846,38 +1051,35 @@ namespace Com.Example.ShimmerBridge
                         _log("[CFG] Board detection failed → uso flags richiesti");
                     }
                 }
-                catch { /* non bloccare la config se detection fallisce */ }
+                catch {}
 
-                // SR default: 512Hz per EXG, 100Hz per IMU
+                // Default SR if not specified
                 if (!cfg.SamplingRate.HasValue || cfg.SamplingRate.Value <= 0)
-                    cfg.SamplingRate = 100;
-
-
+                    cfg.SamplingRate = 51;
 
                 int BuildMask()
                 {
                     int mask = 0;
 
-                    // --- EXG ---
-                    if (cfg.EnableExg1) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG1_24BIT; // 0x10
-                    if (cfg.EnableExg2) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG2_24BIT; // 0x08
+                    // EXG
+                    if (cfg.EnableExg1) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG1_24BIT;
+                    if (cfg.EnableExg2) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXG2_24BIT;
 
-                    // --- IMU ---
-                    if (cfg.EnableLowNoiseAccelerometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_A_ACCEL;           // 0x80
-                    if (cfg.EnableWideRangeAccelerometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_D_ACCEL;           // 0x1000
-                    if (cfg.EnableGyroscope) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_MPU9150_GYRO;      // 0x040
-                    if (cfg.EnableMagnetometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_LSM303DLHC_MAG;    // 0x20
-                    if (cfg.EnablePressureTemperature) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_BMP180_PRESSURE;   // 0x40000
-                    if (cfg.EnableBattery) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_VBATT;             // 0x2000
-
-                    // --- EXT ADC ---
-                    if (cfg.EnableExtA6) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A6;            // 0x01
-                    if (cfg.EnableExtA7) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A7;            // 0x02
-                    if (cfg.EnableExtA15) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A15;           // 0x0800
+                    // IMU
+                    if (cfg.EnableLowNoiseAccelerometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_A_ACCEL;
+                    if (cfg.EnableWideRangeAccelerometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_D_ACCEL;
+                    if (cfg.EnableGyroscope) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_MPU9150_GYRO;
+                    if (cfg.EnableMagnetometer) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_LSM303DLHC_MAG;
+                    if (cfg.EnablePressureTemperature) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_BMP180_PRESSURE;
+                    if (cfg.EnableBattery) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_VBATT;
+                    if (cfg.EnableExtA6) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A6;            
+                    if (cfg.EnableExtA7) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A7;
+                    if (cfg.EnableExtA15) mask |= (int)ShimmerBluetooth.SensorBitmapShimmer3.SENSOR_EXT_A15;
 
                     return mask;
                 }
 
+                // Apply SR (if provided) before enabling sensors
                 if (cfg.SamplingRate.HasValue && cfg.SamplingRate.Value > 0)
                 {
                     int sr = (int)Math.Round(cfg.SamplingRate.Value);
@@ -885,12 +1087,14 @@ namespace Com.Example.ShimmerBridge
                     await Task.Delay(250);
                 }
 
+                // Apply sensor bitmap
                 _core.WriteSensors(BuildMask());
                 await Task.Delay(350);
 
+                // Clear cached indices (labels can change with new mask)
                 ResetIndices();
 
-                // salva copia dell'ultima config applicata
+                // Snapshot the effective configuration for later queries/broadcasts
                 _currentCfg = new ShimmerConfig
                 {
                     EnableLowNoiseAccelerometer = cfg.EnableLowNoiseAccelerometer,
@@ -908,24 +1112,36 @@ namespace Com.Example.ShimmerBridge
                     ExgUse16Bit = cfg.ExgUse16Bit,
                     ExgMode = cfg.ExgMode
                 };
-                _log($"[CFG] ExgMode applied = {_currentCfg.ExgMode} (wire='{_currentCfg.ExgModeWire ?? "null"}')");
 
+                _log($"[CFG] ExgMode applied = {_currentCfg.ExgMode} (wire='{_currentCfg.ExgModeWire ?? "null"}')");
                 _log($"[CFG] applied (SR={_currentCfg.SamplingRate:F0}Hz, EXG1={_currentCfg.EnableExg1}, EXG2={_currentCfg.EnableExg2}, IMU: LN={_currentCfg.EnableLowNoiseAccelerometer}, WR={_currentCfg.EnableWideRangeAccelerometer}, GYR={_currentCfg.EnableGyroscope}, MAG={_currentCfg.EnableMagnetometer}, BMP180={_currentCfg.EnablePressureTemperature}, VBATT={_currentCfg.EnableBattery}, EXT={_currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15})");
             }
 
+
+            /// <summary>
+            /// Starts streaming from the connected Shimmer device:
+            /// wires a packet handler, resets cached indices/timestamps,
+            /// reads EXG/IMU values from each packet, builds a JSON payload,
+            /// and broadcasts it to subscribers.
+            /// </summary>
             public void Start()
             {
+
+                // Must be connected/opened first
                 if (_core == null) throw new InvalidOperationException("Not open");
 
+                // Ensure we don't double-subscribe the handler
                 if (_handler != null)
                 {
                     try { _core.UICallback -= _handler; } catch { }
                     _handler = null;
                 }
 
+                // Fresh parsing state for a new streaming session
                 ResetIndices();
                 _tsBase = null;
 
+                // Packet handler: invoked for every incoming data packet
                 _handler = (s, e) =>
                 {
                     try
@@ -936,9 +1152,10 @@ namespace Com.Example.ShimmerBridge
                             var oc = ev.getObject() as ObjectCluster;
                             if (oc == null) return;
 
+                            // Resolve indices lazily, accounting for label variations  
                             RefreshMissingIndices(oc);
 
-                            // timestamp relativo alla sessione
+                            // Compute session-relative timestamp (first packet becomes zero)
                             double? tsAbs = Val(SafeGet(oc, iTs));
                             double tsRel = 0.0;
                             if (tsAbs.HasValue)
@@ -947,9 +1164,10 @@ namespace Com.Example.ShimmerBridge
                                 tsRel = tsAbs.Value - _tsBase.Value; // stesse unità di tsAbs
                             }
 
-                            // ====== LETTURA VALORI ======
+                            // ---- Read sensor values ----
+
                             // EXG
-                            double? exg1 = Val(SafeGet(oc, iExg1));
+                            double? ex1 = Val(SafeGet(oc, iExg1));
                             double? exg2 = Val(SafeGet(oc, iExg2));
 
                             // IMU
@@ -965,7 +1183,7 @@ namespace Com.Example.ShimmerBridge
                             if (a15.HasValue) _lastA15 = a15;
 
 
-                            // ====== COSTRUZIONE PAYLOAD ======
+                            // Build outbound JSON payload
                             var map = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
                             {
                                 ["type"] = "sample",
@@ -973,28 +1191,17 @@ namespace Com.Example.ShimmerBridge
                                 ["ts"] = tsRel
                             };
 
-                            // includi la modalità corrente nel sample (se impostata)
+                            // Include EXG mode if set
                             if (_currentCfg.ExgMode != ExgMode.None)
                                 map["exg_mode"] = _currentCfg.ExgModeWire;
 
-                            bool hasExg = (_currentCfg.EnableExg1 && iExg1 >= 0) || (_currentCfg.EnableExg2 && iExg2 >= 0) || exg1.HasValue || exg2.HasValue;
+                            bool hasExg = (_currentCfg.EnableExg1 && iExg1 >= 0) || (_currentCfg.EnableExg2 && iExg2 >= 0) || ex1.HasValue || exg2.HasValue;
+                                var exg1 = ex1 ?? 0.0;
+                                var ex2 = exg2 ?? 0.0;
+                                map["Exg1"] = ex1;
+                                map["Exg2"] = ex2;
 
-
-                                var ch1 = exg1 ?? 0.0;
-                                var ch2 = exg2 ?? 0.0;
-
-
-                                // Nomi attesi dalla UI
-                                map["ExgCh1"] = ch1;
-                                map["ExgCh2"] = ch2;
-
-                                // Alias moderni (facoltativi; non disturbano la DataPage)
-                                map["exg1"] = ch1;
-                                map["exg2"] = ch2;
-
-
-
-                            // --- IMU (annidato) ---
+                            // IMU nested blocks
                             if (_currentCfg.EnableLowNoiseAccelerometer || _currentCfg.EnableWideRangeAccelerometer ||
                                 _currentCfg.EnableGyroscope || _currentCfg.EnableMagnetometer ||
                                 _currentCfg.EnablePressureTemperature || _currentCfg.EnableBattery ||
