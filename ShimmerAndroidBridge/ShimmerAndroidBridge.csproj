@@ -21,6 +21,10 @@
 		<DefineConstants>$(DefineConstants);ANDROID</DefineConstants>
 	</PropertyGroup>
 
+	<ItemGroup>
+		<AndroidResource Include="Resources\values\strings.xml" />
+	</ItemGroup>
+
 	<!-- Android resources & manifest -->
 	<ItemGroup>
 		<AndroidResource Include="Resources\layout\activity_main.axml" />

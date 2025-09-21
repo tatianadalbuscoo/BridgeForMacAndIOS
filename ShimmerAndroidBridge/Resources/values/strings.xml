@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	
+	<!--
+	String resources for Shimmer Bridge UI.
+	Keep all user-visible text here to enable localization.
+	Theme: soft beige background, warm browns for text, caramel accents for primary actions.
+	-->
+
+	<string name="paired_shimmer_devices">Paired Shimmer devices</string>
+	<string name="connect_start">Connect &amp; Start</string>
+	<string name="stop">Stop</string>
+	<string name="status_idle">Status: Idle</string>
+</resources>

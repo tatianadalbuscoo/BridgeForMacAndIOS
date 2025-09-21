@@ -8,6 +8,7 @@
 
 using ShimmerAPI;
 
+
 namespace ShimmerSDK.Android
 {
 
@@ -120,5 +121,6 @@ namespace ShimmerSDK.Android
         /// Forwards to <see cref="FlushInputConnection"/>. No-op on Android RFCOMM, kept for API parity.
         /// </summary>
         public void FlushInput() => FlushInputConnection();
+
     }
 }

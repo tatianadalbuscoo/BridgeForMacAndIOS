@@ -19,6 +19,7 @@ using Activity = Android.App.Activity;
 using System.Text.Json.Serialization;
 using ShimmerBridgeScan;
 
+
 namespace ShimmerBridgeMangager
 {
 
@@ -234,7 +235,7 @@ namespace ShimmerBridgeMangager
 
             var sess = new SppSession(
                 mac,
-                broadcast: (m, json) => BroadcastToSubscribers(m, json),    // Fan-out JSON to subscribed clients
+                broadcast: (m, json) => { _ = BroadcastToSubscribers(m, json); },    // Fan-out JSON to subscribed clients
                 log: msg => Log?.Invoke(msg)
             );
 
@@ -244,7 +245,6 @@ namespace ShimmerBridgeMangager
             await sess.OpenAsync();             // Connect SPP
             await sess.ApplyConfigAsync(cfg);   // Apply config (auto-config IMU/EXG per board)
 
-            // Log effective EXG mode (after applying)
             var applied = sess.CurrentConfig;
             Log?.Invoke($"[SERVER] applied   exg_mode (wire)='{applied.ExgModeWire ?? "null"}' enum={applied.ExgMode}");
 
@@ -1256,7 +1256,6 @@ namespace ShimmerBridgeMangager
                                         a7 = _currentCfg.EnableExtA7 ? _lastA7 : (double?)null,
                                         a15 = _currentCfg.EnableExtA15 ? _lastA15 : (double?)null
                                     };
-
                             }
 
                             // Fan-out to WS subscribers

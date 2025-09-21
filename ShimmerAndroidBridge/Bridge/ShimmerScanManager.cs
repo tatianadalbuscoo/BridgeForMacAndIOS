@@ -89,8 +89,8 @@ namespace ShimmerBridgeScan
 
             // Snapshot of paired Shimmer-like devices (used to compute DeviceOff later)
             var bonded = (_adapter.BondedDevices ?? new HashSet<BluetoothDevice>())
-                .Where(d => LooksLikeShimmer(d?.Name, d?.Address))
-                .ToDictionary(d => d.Address, d => d);
+                .Where(d => d != null && d.Address != null && LooksLikeShimmer(d.Name, d.Address))
+                .ToDictionary(d => d.Address!, d => d);
 
             var discovered = new ConcurrentDictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
             var tcsFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -104,17 +104,21 @@ namespace ShimmerBridgeScan
                 onFound: (dev, rssi) =>
                 {
                     if (dev?.Name == null) return;
-                    if (!LooksLikeShimmer(dev.Name, dev.Address)) return;
+
+                    var addr = dev.Address;
+                    if (string.IsNullOrEmpty(addr)) return;
+
+                    if (!LooksLikeShimmer(dev.Name, addr)) return;
 
                     // Reuse cached classification if we have it for this MAC
-                    var cached = _typeCache.TryGetValue(dev.Address, out var t) ? t : DeviceType.Unknown;
+                    var cached = (_typeCache.TryGetValue(addr, out var t)) ? t : DeviceType.Unknown;
 
-                    discovered[dev.Address] = new Entry
+                    discovered[addr] = new Entry
                     {
                         Name = dev.Name,
-                        Mac = dev.Address,
+                        Mac = addr,
                         Rssi = rssi,
-                        IsPaired = bonded.ContainsKey(dev.Address),
+                        IsPaired = bonded.ContainsKey(addr),
                         Type = cached
                     };
                 },
@@ -223,7 +227,6 @@ namespace ShimmerBridgeScan
         sealed class DiscoveryReceiver : BroadcastReceiver
         {
 
-
             readonly Action<BluetoothDevice?, int?> _onFound;    // callback when a device is discovered
             readonly Action _onFinished;                         // callback when discovery ends
 
@@ -242,28 +245,36 @@ namespace ShimmerBridgeScan
 
             /// <summary>
             /// Handles Bluetooth discovery broadcasts and forwards them to callbacks.
+            /// Listens for <see cref="BluetoothDevice.ActionFound"/> and
+            /// <see cref="BluetoothAdapter.ActionDiscoveryFinished"/>.
             /// </summary>
-            /// <param name="context">Android context.</param>
-            /// <param name="intent">Broadcast intent (ACTION_FOUND / ACTION_DISCOVERY_FINISHED).</param>
-            public override void OnReceive(Context context, Intent intent)
+            /// <param name="context">Android context (may be null per platform annotations).</param>
+            /// <param name="intent">
+            /// Broadcast intent: either <c>BluetoothDevice.ActionFound</c> or
+            /// <c>BluetoothAdapter.ActionDiscoveryFinished</c> (may be null).
+            /// </param>
+            public override void OnReceive(Android.Content.Context? context, Android.Content.Intent? intent)
             {
+                if (intent is null) return;
+
                 var action = intent.Action;
                 if (action == BluetoothDevice.ActionFound)
                 {
-
-                    // Device discovered: extract BluetoothDevice and (optional) RSSI
+                    // Device discovered: extract BluetoothDevice and optional RSSI
                     var dev = (BluetoothDevice?)intent.GetParcelableExtra(BluetoothDevice.ExtraDevice);
+
                     int? rssi = null;
                     if (intent.HasExtra(BluetoothDevice.ExtraRssi))
                         rssi = intent.GetShortExtra(BluetoothDevice.ExtraRssi, short.MinValue);
 
-                    _onFound(dev, rssi);  // notify caller
+                    _onFound(dev, rssi); // notify caller
                 }
                 else if (action == BluetoothAdapter.ActionDiscoveryFinished)
                 {
                     _onFinished(); // notify caller that discovery ended
                 }
             }
+
         }
 
 
@@ -480,7 +491,6 @@ namespace ShimmerBridgeScan
 
                 return null;
 
-
                 // Local helper: enqueue only non - primitive, non -enum, non-string objects
                 // and only if not seen before (reference equality).
                 void EnqueueIfNew(object o, int d)
@@ -571,7 +581,6 @@ namespace ShimmerBridgeScan
                     catch { }
                 }
 
-                // Fallback: some builds expose a property instead of a method
                 foreach (var pName in new[] { "ExpansionBoard", "ExpansionBoardID", "DaughterCardID" })
                 {
                     var p = t.GetProperty(pName, BindingFlags.Public | BindingFlags.Instance);
@@ -626,7 +635,6 @@ namespace ShimmerBridgeScan
             /// </summary>
             private sealed class RefEqComparer : IEqualityComparer<object>
             {
-
 
                 /// <summary>
                 /// Determines whether the specified objects are the same reference.

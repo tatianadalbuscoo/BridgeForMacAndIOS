@@ -17,11 +17,16 @@ using ShimmerBridgeScan;
 using Android.Graphics;
 using Android.Graphics.Drawables;
 using AndroidResource = ShimmerAndroidBridge.Resource;
-using Javax.Crypto;
 
 
 namespace ShimmerBridge
 {
+
+    /// <summary>
+    /// Main Android Activity for the Shimmer Bridge app.
+    /// Builds the UI, handles Bluetooth permissions/scan, and manages
+    /// device selection, configuration, and start/stop of streaming via WsBridgeManager.
+    /// </summary>
 
     // Main entry Activity for the app.
     [Activity(
@@ -31,11 +36,6 @@ namespace ShimmerBridge
         Name = "ShimmerBridge.MainActivity"
     )]
 
-    /// <summary>
-    /// Main Android Activity for the Shimmer Bridge app.
-    /// Builds the UI, handles Bluetooth permissions/scan, and manages
-    /// device selection, configuration, and start/stop of streaming via WsBridgeManager.
-    /// </summary>
     public class MainActivity : Activity
     {
 
@@ -82,7 +82,11 @@ namespace ShimmerBridge
         /// </summary>
         /// <param name="dp">Value in dp (density-independent pixels).</param>
         /// <returns>Equivalent pixel value rounded to the nearest int.</returns>
-        int Dp(int dp) => (int)(dp * Resources.DisplayMetrics.Density + 0.5f);
+        int Dp(int dp)
+        {
+            var density = Resources?.DisplayMetrics?.Density ?? 1f;
+            return (int)(dp * density + 0.5f);
+        }
 
 
         /// <summary>
@@ -103,7 +107,7 @@ namespace ShimmerBridge
         /// </summary>
         /// <param name="savedInstanceState">
         /// If non-null, the activity is being re-initialized after previously being shut down;
-        /// contains the most recent data supplied in <see cref="OnSaveInstanceState(Bundle)"/>.
+        /// contains the most recent data supplied/>.
         /// </param>
         protected override void OnCreate(Bundle? savedInstanceState)
         {
@@ -137,7 +141,8 @@ namespace ShimmerBridge
             catch (Exception ex)
             {
                 Android.Util.Log.Error(TAG, "Init error:\n" + ex);
-                Toast.MakeText(this, ex.Message, ToastLength.Long).Show();
+                var toast = Toast.MakeText(this, ex.Message ?? "Unexpected error", ToastLength.Long);
+                toast?.Show();
             }
         }
 
@@ -424,8 +429,7 @@ namespace ShimmerBridge
 
         /// <summary>
         /// Debounces reconfiguration requests per device MAC. If the user toggles multiple
-        /// checkboxes quickly, only the last change within the debounce window triggers
-        /// <see cref="_ws.UpdateConfigAsync(string, ShimmerConfig)"/>.
+        /// checkboxes quickly, only the last change within the debounce window triggers.
         /// </summary>
         /// <param name="mac">Device MAC address used as the debounce key.</param>
         /// <param name="build">Factory that reads current UI and returns a fresh <see cref="ShimmerConfig"/>.</param>
@@ -462,19 +466,23 @@ namespace ShimmerBridge
 
         /// <summary>
         /// Shows a non-cancelable modal progress dialog with an indeterminate spinner.
-        /// Disposes any previous dialog instance before creating a new one.
+        /// Closes (Dismiss) any previous dialog instance before creating a new one,
+        /// then stores the new dialog for later dismissal.
         /// </summary>
         /// <param name="title">Dialog title (defaults to "Scanning…").</param>
         void ShowScanDialog(string title = "Scanning…")
         {
             try { _scanDialog?.Dismiss(); } catch { }
-            var pb = new ProgressBar(this) { Indeterminate = true };
-            _scanDialog = new AlertDialog.Builder(this)
-                .SetTitle(title)
-                .SetView(pb)
-                .SetCancelable(false)
-                .Create();
-            _scanDialog.Show();
+
+            var pb = new ProgressBar(this!) { Indeterminate = true };   
+
+            var builder = new Android.App.AlertDialog.Builder(this!);
+            builder.SetTitle(title ?? "Scanning…");
+            builder.SetView(pb);
+            builder.SetCancelable(false);
+
+            _scanDialog = builder.Create();   
+            _scanDialog?.Show();             
         }
 
 
@@ -623,7 +631,8 @@ namespace ShimmerBridge
 
             if (selected.Count == 0)
             {
-                Toast.MakeText(this, "Please select at least one device.", ToastLength.Long).Show();
+                var toast = Toast.MakeText(this!, "Please select at least one device.", ToastLength.Long);
+                toast?.Show();
                 _status.Text = "Status: no device selected";
                 return;
             }
@@ -633,11 +642,15 @@ namespace ShimmerBridge
             if (noSensor.Count > 0)
             {
                 var names = string.Join("\n", noSensor.Select(x => $"- {x.Name} [{x.Mac}]"));
-                new AlertDialog.Builder(this)
-                    .SetTitle("No sensors selected")
-                    .SetMessage($"Enable at least one sensor for:\n{names}")
-                    .SetPositiveButton("OK", (s, e) => { })
-                    .Show();
+
+                var builder = new Android.App.AlertDialog.Builder(this!);
+                builder.SetTitle("No sensors selected");
+                builder.SetMessage($"Enable at least one sensor for:\n{names}");
+                builder.SetPositiveButton("OK", (s, e) => { });
+
+                var alert = builder.Create();  
+                alert?.Show();                 
+
                 _status.Text = "Status: sensor selection required";
                 return;
             }
@@ -664,13 +677,14 @@ namespace ShimmerBridge
             _status.Text = "Status: starting selected devices…";
 
             // Progress dialog while connecting
-            var progress = new ProgressBar(this) { Indeterminate = true };
-            var dlg = new AlertDialog.Builder(this)
-                .SetTitle("Connecting…")
-                .SetView(progress)
-                .SetCancelable(false)
-                .Create();
-            dlg.Show();
+            var progress = new ProgressBar(this!) { Indeterminate = true };
+            var connectBuilder = new Android.App.AlertDialog.Builder(this!);
+            connectBuilder.SetTitle("Connecting…");
+            connectBuilder.SetView(progress);
+            connectBuilder.SetCancelable(false);
+            var connectDlg = connectBuilder.Create();
+            connectDlg?.Show();
+
 
             var results = new List<(string name, string mac, bool ok, string? error)>();
             try
@@ -694,59 +708,66 @@ namespace ShimmerBridge
             }
             finally
             {
-                try { dlg.Dismiss(); } catch { }
+                try { connectDlg?.Dismiss(); } catch { }
             }
 
             // Show per-device summary
             var msg = string.Join("\n", results.Select(r => r.ok
                 ? $"✓ {r.name} [{r.mac}] — OK"
                 : $"✗ {r.name} [{r.mac}] — {r.error}"));
-            new AlertDialog.Builder(this)
-                .SetTitle("Connection result")
-                .SetMessage(msg)
-                .SetPositiveButton("OK", (s, e) => { })
-                .Show();
+
+            var summaryBuilder = new Android.App.AlertDialog.Builder(this!);
+            summaryBuilder.SetTitle("Connection result");
+            summaryBuilder.SetMessage(msg);
+            summaryBuilder.SetPositiveButton("OK", (s, e) => { });
+            var summaryDlg = summaryBuilder.Create();
+            summaryDlg?.Show();
         }
 
 
         /// <summary>
-        /// Stops all active device streams via the WebSocket bridge, showing a modal spinner
-        /// during shutdown and a summary dialog afterward.
+        /// Stops all active device streams via the WebSocket bridge.
+        /// Shows a non-cancelable progress dialog while shutting down, then updates the status to Idle
+        /// and displays a summary dialog indicating how many sessions were previously active.
         /// </summary>
-        /// <returns>A task that completes when all sessions are closed and UI is updated.</returns>
+        /// <returns>A task that completes after all sessions are closed and the UI is updated.</returns>
         private async Task StopAllWithNoticeAsync()
         {
             int before = _ws.ActiveSessionCount;
 
             // Modal progress while stopping
-            var pb = new ProgressBar(this) { Indeterminate = true };
-            var dlg = new AlertDialog.Builder(this)
-                .SetTitle("Stopping…")
-                .SetView(pb)
-                .SetCancelable(false)
-                .Create();
-            dlg.Show();
+            var pb = new ProgressBar(this!) { Indeterminate = true };
+            var builder = new Android.App.AlertDialog.Builder(this!);
+            builder.SetTitle("Stopping…");
+            builder.SetView(pb);
+            builder.SetCancelable(false);
+            var dlg = builder.Create();
+            dlg?.Show();
 
             try
             {
-                await _ws.CloseAllAsync();      // Close every active session
+
+                // Close every active session
+                await _ws.CloseAllAsync();
             }
             finally
             {
-                try { dlg.Dismiss(); } catch { }
+                try { dlg?.Dismiss(); } catch { }
             }
 
             _status.Text = "Status: Idle";
 
             // User-facing summary
-            new AlertDialog.Builder(this)
-                .SetTitle("Stopped")
-                .SetMessage(before > 0
-                    ? $"Streaming stopped on {before} device(s)."
-                    : "No active streams.")
-                .SetPositiveButton("OK", (s, e) => { })
-                .Show();
+            var summaryBuilder = new Android.App.AlertDialog.Builder(this!);
+            summaryBuilder.SetTitle("Stopped");
+            summaryBuilder.SetMessage(before > 0
+                ? $"Streaming stopped on {before} device(s)."
+                : "No active streams.");
+            summaryBuilder.SetPositiveButton("OK", (s, e) => { });
+            var summaryDlg = summaryBuilder.Create();
+            summaryDlg?.Show();
         }
+
 
         /// <summary>
         /// Lifecycle cleanup: disposes any pending debounce timers and stops the WebSocket bridge,

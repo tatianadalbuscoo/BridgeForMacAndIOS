@@ -8,6 +8,7 @@
 using Android.Bluetooth;
 using Java.Util;
 
+
 namespace ShimmerSDK.Android
 {
 
@@ -20,7 +21,8 @@ namespace ShimmerSDK.Android
 
         // Standard Serial Port Profile UUID used by classic Bluetooth devices
         private static readonly UUID SPP_UUID =
-            UUID.FromString("00001101-0000-1000-8000-00805F9B34FB");
+            UUID.FromString("00001101-0000-1000-8000-00805F9B34FB")!;
+
 
         // Global semaphore to serialize connection attempts across instances and avoid adapter contention
         private static readonly SemaphoreSlim ConnectGate = new(1, 1);
@@ -90,6 +92,12 @@ namespace ShimmerSDK.Android
                 System.Exception? last = null;
 
                 // Try secure, insecure, then reflection-based RFCOMM connection (stop at first success).
+                if (device is null)
+                {
+                    last = new ArgumentNullException(nameof(device));
+                    return;
+                }
+
                 if (TryConnect(CreateSecure(device), out last)) return;
                 if (TryConnect(CreateInsecure(device), out last)) return;
                 if (TryConnect(CreateReflectChannel1(device), out last)) return;
@@ -165,7 +173,7 @@ namespace ShimmerSDK.Android
         /// <param name="d">Target Bluetooth device.</param>
         /// <returns>A secure <see cref="BluetoothSocket"/>.</returns>
         private static BluetoothSocket CreateSecure(BluetoothDevice d) =>
-            d.CreateRfcommSocketToServiceRecord(SPP_UUID);
+            d.CreateRfcommSocketToServiceRecord(SPP_UUID)!;
 
 
         /// <summary>
@@ -175,7 +183,7 @@ namespace ShimmerSDK.Android
         /// <param name="d">Target Bluetooth device.</param>
         /// <returns>An insecure <see cref="BluetoothSocket"/>.</returns>
         private static BluetoothSocket CreateInsecure(BluetoothDevice d) =>
-            d.CreateInsecureRfcommSocketToServiceRecord(SPP_UUID);
+            d.CreateInsecureRfcommSocketToServiceRecord(SPP_UUID)!;
 
 
         /// <summary>
@@ -190,12 +198,12 @@ namespace ShimmerSDK.Android
             // Lookup method: BluetoothDevice.createRfcommSocket(int)
             Java.Lang.Reflect.Method m = d.Class.GetMethod(
                 "createRfcommSocket",
-                new Java.Lang.Class[] { Java.Lang.Integer.Type }    // parameter type: int
-            );
+                new Java.Lang.Class[] { Java.Lang.Integer.Type! }
+            )!;
 
             // Invoke with channel 1 (common for SPP)
             var socketObj = m.Invoke(d, new Java.Lang.Object[] { Java.Lang.Integer.ValueOf(1) });
-            return (BluetoothSocket)socketObj;
+            return (BluetoothSocket)socketObj!;
         }
 
 

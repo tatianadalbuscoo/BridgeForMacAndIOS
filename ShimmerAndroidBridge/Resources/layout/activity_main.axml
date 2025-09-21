@@ -17,10 +17,9 @@ Shows paired Shimmer devices as cards, plus Connect/Stop actions and a status la
       android:layout_width="match_parent"
       android:layout_height="wrap_content">
 
-    <!-- Page title -->
     <TextView
         style="@style/H1"
-        android:text="Paired Shimmer devices"
+        android:text="@string/paired_shimmer_devices"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 
@@ -39,31 +38,32 @@ Shows paired Shimmer devices as cards, plus Connect/Stop actions and a status la
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
-      <!-- Connect to selected devices and start streaming -->
-      <Button
-          android:id="@+id/btnStart"
-          style="@style/PrimaryButton"
-          android:text="Connect &amp; Start"
-          android:layout_width="0dp"
-          android:layout_height="wrap_content"
-          android:layout_weight="1" />
+    <!-- Connect to selected devices and start streaming -->
+    <Button
+        android:id="@+id/btnStart"
+        style="@style/PrimaryButton"
+        android:text="@string/connect_start"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1" />
 
       <!-- Stop streaming / disconnect -->
       <Button
-          android:id="@+id/btnStop"
-          style="@style/AccentButton"
-          android:text="Stop"
-          android:layout_width="0dp"
-          android:layout_height="wrap_content"
-          android:layout_weight="1"
-          android:layout_marginStart="8dp" />
+        android:id="@+id/btnStop"
+        style="@style/AccentButton"
+        android:text="@string/stop"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="8dp" />
+      
     </LinearLayout>
 
     <!-- Status feedback for the current scanning/connection state -->
     <TextView
         android:id="@+id/txtStatus"
         style="@style/Label"
-        android:text="Status: Idle"
+        android:text="@string/status_idle"
         android:layout_marginTop="16dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
