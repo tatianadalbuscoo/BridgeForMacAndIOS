@@ -8,8 +8,6 @@
  * Consumed by:    ShimmerBluetoothTransport (wires SDK logic to this transport).
  */
 
-#if ANDROID
-using System.IO;
 
 namespace ShimmerSDK.Android
 {
@@ -24,4 +22,3 @@ namespace ShimmerSDK.Android
         void FlushInput();
     }
 }
-#endif

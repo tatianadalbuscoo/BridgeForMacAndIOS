@@ -5,12 +5,6 @@
  */
 
 
-#if ANDROID
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using Android.Bluetooth;
 using Java.Util;
 
@@ -253,4 +247,3 @@ namespace ShimmerSDK.Android
         }
     }
 }
-#endif

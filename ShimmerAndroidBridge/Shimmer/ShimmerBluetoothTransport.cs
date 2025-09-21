@@ -6,8 +6,6 @@
  */
 
 
-#if ANDROID
-using System;
 using ShimmerAPI;
 
 namespace ShimmerSDK.Android
@@ -124,4 +122,3 @@ namespace ShimmerSDK.Android
         public void FlushInput() => FlushInputConnection();
     }
 }
-#endif

@@ -9,12 +9,6 @@
  */
 
 
-#if ANDROID
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using ShimmerAPI;
-
 namespace ShimmerSDK.Android
 {
 
@@ -196,4 +190,3 @@ namespace ShimmerSDK.Android
         public string GetShimmerAddress() => _core.GetShimmerAddress();
     }
 }
-#endif

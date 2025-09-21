@@ -48,7 +48,7 @@ namespace ShimmerBridgeMangager
         // --- EXG flags ---
         public bool EnableExg1 { get; set; }   
         public bool EnableExg2 { get; set; }   
-        public bool ExgUse16Bit { get; set; }  // false -> 24-bit
+        public bool ExgUse16Bit { get; set; }
 
 
         [JsonIgnore]    // Avoid numeric enum in JSON
@@ -1421,11 +1421,14 @@ namespace ShimmerBridgeMangager
         /// Current Android <see cref="Activity"/> to access the Wi-Fi service and query the current connection info.
         /// </param>
         /// <returns>The local IPv4 address (e.g., "192.168.1.23"), or "0.0.0.0" if unavailable.</returns>
-        static string GetLocalIp(Activity activity)
+        static string GetLocalIp(Activity? activity)
         {
-            var wm = (WifiManager?)activity.ApplicationContext.GetSystemService(Activity.WifiService);
-            if (wm?.ConnectionInfo is null) return "0.0.0.0";
-            int ip = wm.ConnectionInfo.IpAddress;
+            var appCtx = activity?.ApplicationContext;
+            var wm = appCtx?.GetSystemService(Activity.WifiService) as WifiManager;
+            var ci = wm?.ConnectionInfo;
+            if (ci == null) return "0.0.0.0";
+
+            int ip = ci.IpAddress;
             return ((ip) & 0xFF) + "." + ((ip >> 8) & 0xFF) + "." + ((ip >> 16) & 0xFF) + "." + ((ip >> 24) & 0xFF);
         }
 
