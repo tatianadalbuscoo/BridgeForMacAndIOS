@@ -1,3 +1,4 @@
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -5,6 +6,8 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ShimmerAndroidBridge", "ShimmerAndroidBridge\ShimmerAndroidBridge.csproj", "{1794F3E8-7FEE-4BC4-979F-C39D31BD5428}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ShimmerAPI", "ShimmerAPI\ShimmerAPI.csproj", "{1FE279A3-55E4-42DB-A1E6-70E769396BB9}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "tests", "tests\tests.csproj", "{145703C0-137C-40E9-A284-F9C5015CD48D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +36,14 @@ Global
 		{1FE279A3-55E4-42DB-A1E6-70E769396BB9}.Release|Any CPU.Build.0 = Release|Any CPU
 		{1FE279A3-55E4-42DB-A1E6-70E769396BB9}.Release|x86.ActiveCfg = Release|x86
 		{1FE279A3-55E4-42DB-A1E6-70E769396BB9}.Release|x86.Build.0 = Release|x86
+		{145703C0-137C-40E9-A284-F9C5015CD48D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{145703C0-137C-40E9-A284-F9C5015CD48D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{145703C0-137C-40E9-A284-F9C5015CD48D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{145703C0-137C-40E9-A284-F9C5015CD48D}.Debug|x86.Build.0 = Debug|Any CPU
+		{145703C0-137C-40E9-A284-F9C5015CD48D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{145703C0-137C-40E9-A284-F9C5015CD48D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{145703C0-137C-40E9-A284-F9C5015CD48D}.Release|x86.ActiveCfg = Release|Any CPU
+		{145703C0-137C-40E9-A284-F9C5015CD48D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
