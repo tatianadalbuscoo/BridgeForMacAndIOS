@@ -29,6 +29,11 @@ namespace ShimmerBridgeScan
         public enum DeviceType { Unknown = 0, IMU = 1, EXG = 2, DeviceOff = 3 }
 
 
+        // Cache: remember classification results for MAC
+        private static readonly ConcurrentDictionary<string, DeviceType> _typeCache =
+            new(StringComparer.OrdinalIgnoreCase);
+
+
         /// <summary>
         /// Represents a single device entry with metadata (name, MAC, RSSI, etc.).
         /// </summary>
@@ -50,11 +55,6 @@ namespace ShimmerBridgeScan
             public List<Entry> Visible { get; } = new();
             public List<Entry> Off { get; } = new();
         }
-
-
-        // Cache: remember classification results for MAC
-        private static readonly ConcurrentDictionary<string, DeviceType> _typeCache =
-            new(StringComparer.OrdinalIgnoreCase);
 
 
         /// <summary>

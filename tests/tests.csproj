@@ -1,14 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
-
-  <!-- Include il file reale che contiene ShimmerScanManager -->
-	<ItemGroup>
-		<Compile Include="..\ShimmerAndroidBridge\Bridge\ShimmerScanManager.cs" />
-	</ItemGroup>
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<DefineConstants>$(DefineConstants);TEST_STUBS</DefineConstants>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
@@ -17,4 +13,22 @@
 		<PackageReference Include="coverlet.collector" Version="6.0.2" />
 	</ItemGroup>
 
+	<!-- File sotto test (link) -->
+	<ItemGroup>
+		<Compile Include="..\ShimmerAndroidBridge\Bridge\ShimmerScanManager.cs"
+				 Link="UnderTest\ShimmerScanManager.cs" />
+	</ItemGroup>
+
+	<!-- Solo se gli stub sono FUORI dal progetto di test:
+  <ItemGroup>
+    <Compile Include="..\path\to\stubs\AndroidStubs.cs" Link="Stubs\AndroidStubs.cs" />
+  </ItemGroup>
+  -->
+
+	<!-- Copia config runner xUnit (per disabilitare parallelismo) -->
+	<ItemGroup>
+		<None Update="xunit.runner.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
 </Project>
