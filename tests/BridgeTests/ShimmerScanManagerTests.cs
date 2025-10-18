@@ -132,7 +132,6 @@ namespace BridgeTests
             Assert.Contains(v2, r.Visible);
             Assert.Contains(off1, r.Off);
 
-            // le liste non si “incrociano”
             Assert.DoesNotContain(off1, r.Visible);
             Assert.DoesNotContain(v1, r.Off);
         }

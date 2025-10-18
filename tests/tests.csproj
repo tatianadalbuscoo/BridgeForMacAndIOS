@@ -13,19 +13,20 @@
 		<PackageReference Include="coverlet.collector" Version="6.0.2" />
 	</ItemGroup>
 
-	<!-- File sotto test (link) -->
+	<!-- File sotto test (linkati dal progetto Bridge) -->
 	<ItemGroup>
+		<Compile Include="..\ShimmerAndroidBridge\Bridge\WsBridgeManager.cs"
+				 Link="UnderTest\WsBridgeManager.cs" />
 		<Compile Include="..\ShimmerAndroidBridge\Bridge\ShimmerScanManager.cs"
 				 Link="UnderTest\ShimmerScanManager.cs" />
 	</ItemGroup>
 
-	<!-- Solo se gli stub sono FUORI dal progetto di test:
-  <ItemGroup>
-    <Compile Include="..\path\to\stubs\AndroidStubs.cs" Link="Stubs\AndroidStubs.cs" />
-  </ItemGroup>
-  -->
+	<!-- Nessun Include esplicito per Stubs\AndroidStubs.cs: lo prende lo SDK -->
+	<ItemGroup>
+		<ProjectReference Include="..\ShimmerAPI\ShimmerAPI.csproj" />
+	</ItemGroup>
 
-	<!-- Copia config runner xUnit (per disabilitare parallelismo) -->
+
 	<ItemGroup>
 		<None Update="xunit.runner.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

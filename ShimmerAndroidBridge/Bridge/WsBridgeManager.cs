@@ -15,7 +15,6 @@ using Android.Net.Wifi;
 using WatsonWebsocket;
 using ShimmerSDK.Android;
 using ShimmerAPI;
-using Activity = Android.App.Activity;
 using System.Text.Json.Serialization;
 using ShimmerBridgeScan;
 
@@ -45,6 +44,7 @@ namespace ShimmerBridgeMangager
         public bool EnableExtA7 { get; set; }
         public bool EnableExtA15 { get; set; }
         public double? SamplingRate { get; set; }
+
 
         // --- EXG flags ---
         public bool EnableExg1 { get; set; }   
