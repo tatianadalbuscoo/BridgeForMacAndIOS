@@ -686,6 +686,144 @@ namespace tests.BridgeTests
             Assert.False(mgr.IsRunning);
         }
 
+        // ------------------------------------------------------------
+        // ----- WS lifecycle behavior (no SPP dependencies) ----------
+        // ------------------------------------------------------------
+
+        /// <summary>
+        /// Start -> Stop -> Start again should be safe:
+        /// - no exceptions
+        /// - IsRunning true after each Start
+        /// - IsRunning false after Stop
+        /// </summary>
+        [Fact]
+        public async Task Restart_AfterStop_Works()
+        {
+            var mgr = new WsBridgeManager();
+
+            // 1st start
+            await mgr.StartAsync(new Activity(), port: 9010);
+            Assert.True(mgr.IsRunning);
+
+            // stop
+            await mgr.StopAsync();
+            Assert.False(mgr.IsRunning);
+
+            // 2nd start
+            await mgr.StartAsync(new Activity(), port: 9011);
+            Assert.True(mgr.IsRunning);
+
+            // final stop to leave clean state
+            await mgr.StopAsync();
+            Assert.False(mgr.IsRunning);
+        }
+
+        /// <summary>
+        /// Multiple Start/Stop cycles should not leak state:
+        /// we only assert the final IsRunning == false and no exceptions are thrown.
+        /// </summary>
+        [Fact]
+        public async Task StartStop_Multiple_Times_NoLeak()
+        {
+            var mgr = new WsBridgeManager();
+
+            for (int i = 0; i < 3; i++)
+            {
+                await mgr.StartAsync(new Activity(), port: 9200 + i);
+                Assert.True(mgr.IsRunning);
+
+                await mgr.StopAsync();
+                Assert.False(mgr.IsRunning);
+            }
+        }
+
+        /// <summary>
+        /// Log event should fire at least once during a start-stop cycle
+        /// (sanity check that instrumentation is wired).
+        /// </summary>
+        [Fact]
+        public async Task LogEvent_Fires_During_Cycle()
+        {
+            var mgr = new WsBridgeManager();
+            int logs = 0;
+            mgr.Log += _ => logs++;
+
+            await mgr.StartAsync(new Activity(), port: 9300);
+            await mgr.StopAsync();
+
+            Assert.True(logs >= 1);
+        }
+
+        /// <summary>
+        /// Dispose() when not running should be a no-op and must not throw.
+        /// </summary>
+        [Fact]
+        public void Dispose_When_NotRunning_Is_NoOp()
+        {
+            var mgr = new WsBridgeManager();
+            var ex = Record.Exception(() => mgr.Dispose());
+            Assert.Null(ex);
+            Assert.False(mgr.IsRunning);
+        }
+
+        /// <summary>
+        /// AnySensorEnabled should not consider SamplingRate alone as "sensors enabled".
+        /// (SamplingRate is independent from enabling any IMU/EXG flag.)
+        /// </summary>
+        [Fact]
+        public void AnySensorEnabled_SamplingRate_Alone_IsFalse()
+        {
+            var c = new ShimmerConfig { SamplingRate = 256.0 };
+            Assert.False(WsBridgeManager.AnySensorEnabled(c));
+        }
+
+        /// <summary>
+        /// JSON round-trip keeps the exg_mode mapping:
+        /// - When ExgMode is set, it serializes to "exg_mode":"<wire>"
+        /// - Deserializing restores the same enum.
+        /// </summary>
+        [Fact]
+        public void Json_RoundTrip_ExgMode_Mapping()
+        {
+            var orig = new ShimmerConfig { ExgMode = ExgMode.Respiration };
+            var json = JsonSerializer.Serialize(orig);
+
+            Assert.Contains("\"exg_mode\":\"resp\"", json);
+
+            var back = JsonSerializer.Deserialize<ShimmerConfig>(json);
+            Assert.NotNull(back);
+            Assert.Equal(ExgMode.Respiration, back!.ExgMode);
+            Assert.Equal("resp", back.ExgModeWire);
+        }
+
+        /// <summary>
+        /// StartAsync logs a URL; we assert it looks like a ws:// URL and contains the requested port.
+        /// (We don't depend on the exact IP to avoid fragility.)
+        /// </summary>
+        [Fact]
+        public async Task StartAsync_Logs_Url_With_Port()
+        {
+            var mgr = new WsBridgeManager();
+            string? last = null;
+            mgr.Log += s => last = s;
+
+            await mgr.StartAsync(new Activity(), port: 9405);
+            Assert.True(mgr.IsRunning);
+
+            Assert.NotNull(last);
+            Assert.Contains("ws://", last!, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(":9405/", last!, StringComparison.OrdinalIgnoreCase);
+
+            await mgr.StopAsync();
+            Assert.False(mgr.IsRunning);
+        }
+
+        // UpdateConfigAsync behavior
+        // ------------------------------------------------------------
+        // ----- UpdateConfigAsync behavior (no source changes) -------
+        // ------------------------------------------------------------
+
+
 
 
     }
