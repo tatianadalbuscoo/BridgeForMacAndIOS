@@ -125,9 +125,12 @@ namespace Android.App
         public Android.Content.Context ApplicationContext => this;
         public const string WifiService = "wifi";
 
+        private readonly Android.Net.Wifi.WifiManager _wifiManager = new Android.Net.Wifi.WifiManager();
+
+
         public override object? GetSystemService(string name)
         {
-            if (name == WifiService) return new Android.Net.Wifi.WifiManager();
+            if (name == WifiService) return _wifiManager;
             return null;
         }
 
@@ -206,6 +209,9 @@ namespace WatsonWebsocket
 
     public class WatsonWsServer : IDisposable
     {
+
+        public static List<(Guid clientId, string message)> SentLog { get; } = new();
+        public static void ClearSentLog() => SentLog.Clear();
         public WatsonWsServer(string ip, int port, bool ssl) { }
         public bool IsListening { get; private set; }
 
@@ -218,7 +224,10 @@ namespace WatsonWebsocket
         public void Dispose() { }
 
         public System.Threading.Tasks.Task SendAsync(Guid clientId, string message)
-            => System.Threading.Tasks.Task.CompletedTask;
+        {
+            Sent.Add((clientId, message));
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
 
         // Helper methods to simulate events during tests.
         public void RaiseConnected(Guid id) =>
@@ -226,6 +235,9 @@ namespace WatsonWebsocket
 
         public void RaiseDisconnected(Guid id) =>
             ClientDisconnected?.Invoke(this, new ClientDisconnectedEventArgs(new WatsonWsClient(id)));
+
+        public readonly System.Collections.Generic.List<(Guid clientId, string message)> Sent
+            = new System.Collections.Generic.List<(Guid clientId, string message)>();
 
         public void RaiseText(Guid id, string text) =>
             MessageReceived?.Invoke(
@@ -236,6 +248,17 @@ namespace WatsonWebsocket
                     new ArraySegment<byte>(Encoding.UTF8.GetBytes(text))
                 )
             );
+
+        public void RaiseBinary(Guid id, byte[] payload) =>
+        MessageReceived?.Invoke(
+            this,
+            new MessageReceivedEventArgs(
+                new WatsonWsClient(id),
+                WebSocketMessageType.Binary,
+                new ArraySegment<byte>(payload)
+            )
+        );
+
     }
 }
 
@@ -267,7 +290,20 @@ namespace ShimmerSDK.Android
         /// In the stub, Connect just marks Connected = true.
         /// Throw here in tests to simulate failures if needed.
         /// </summary>
-        public void Connect() => Connected = true;
+        public void Connect()
+        {
+            Connected = true;
+
+            // Usa i TIPI REALI dal namespace ShimmerAPI (quello del progetto di produzione)
+            var evt = new ShimmerAPI.CustomEventArgs(
+                (int)ShimmerAPI.ShimmerBluetooth.ShimmerIdentifier.MSG_IDENTIFIER_STATE_CHANGE,
+                2 // "connected" (IsConnectedState accetta 2 o 3, o una stringa che contenga CONNECTED)
+            );
+
+            UICallback?.Invoke(this, evt);
+        }
+
+
 
         public bool IsConnected() => Connected;
 
@@ -317,5 +353,26 @@ namespace ShimmerSDK.Android
         public void RaiseUi(EventArgs e) => UICallback?.Invoke(this, e);
     }
 }
+
+namespace ShimmerBridgeScan
+{
+
+        public static class ShimmerBoardDetector
+        {
+            public enum BoardKind { Unknown = 0, EXG = 1, IMU = 2 }
+
+            // Per i test vogliamo che "non si capisca" la board, così il codice usa i flag richiesti.
+            public static bool TryDetectBoardKind(object _core, out BoardKind kind, out string rawId)
+            {
+                kind = BoardKind.Unknown;
+                rawId = "STUB";
+                return false;
+            }
+        }
+}
+
+
+
+
 
 #endif

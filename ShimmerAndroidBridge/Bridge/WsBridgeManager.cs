@@ -1100,6 +1100,8 @@ namespace ShimmerBridgeMangager
                     int sr = (int)Math.Round(cfg.SamplingRate.Value);
                     _core.WriteSamplingRate(sr);
                     await Task.Delay(250);
+
+                    cfg.SamplingRate = sr;
                 }
 
                 // Apply sensor bitmap
@@ -1336,21 +1338,37 @@ namespace ShimmerBridgeMangager
 
             /// <summary>
             /// Determines whether a state object from the Shimmer callback represents a connected state.
-            /// Accepts multiple shapes (int, Java Integer, string with "CONNECTED").
+            /// Supports multiple shapes:
+            ///  - <see cref="int"/> values 2 or 3
+            ///  - <see cref="Java.Lang.Integer"/> values 2 or 3
+            ///  - Strings that contain "CONNECTED" or "CONNECT" (case-insensitive),
+            ///    while explicitly excluding any string that contains "DISCONNECT".
             /// </summary>
             /// <param name="o">The state object provided by the callback.</param>
-            /// <returns><c>true</c> if the device is connected; otherwise <c>false</c>.</returns>
+            /// <returns><c>true</c> if the device is connected; otherwise, <c>false</c>.</returns>
             static bool IsConnectedState(object? o)
             {
                 if (o == null) return false;
+
                 try
                 {
                     if (o is int i) return i == 2 || i == 3;
-                    if (o is Java.Lang.Integer ji) return ji.IntValue() == 2 || ji.IntValue() == 3;
-                    var s = o.ToString() ?? "";
-                    return s.IndexOf("CONNECTED", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (o is Java.Lang.Integer ji) { var v = ji.IntValue(); return v == 2 || v == 3; }
+
+                    var s = o.ToString() ?? string.Empty;
+
+                    if (s.IndexOf("DISCONNECT", StringComparison.OrdinalIgnoreCase) >= 0)
+                        return false;
+
+                    if (s.IndexOf("CONNECTED", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                    if (s.IndexOf("CONNECT", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+
+                    return false;
                 }
-                catch { return false; }
+                catch
+                {
+                    return false;
+                }
             }
 
 

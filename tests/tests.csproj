@@ -3,7 +3,12 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
+
+		<!-- Flag che “scorre” anche nei ProjectReference -->
+		<UseTestStubs>true</UseTestStubs>
 		<DefineConstants>$(DefineConstants);TEST_STUBS</DefineConstants>
+		<!-- Lasciamo abilitato l'auto-include dei .cs locali -->
+		<EnableDefaultCompileItems>true</EnableDefaultCompileItems>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -13,19 +18,16 @@
 		<PackageReference Include="coverlet.collector" Version="6.0.2" />
 	</ItemGroup>
 
-	<!-- File sotto test (linkati dal progetto Bridge) -->
+	<!-- Sorgenti sotto test (link dal progetto Bridge) -->
 	<ItemGroup>
-		<Compile Include="..\ShimmerAndroidBridge\Bridge\WsBridgeManager.cs"
-				 Link="UnderTest\WsBridgeManager.cs" />
-		<Compile Include="..\ShimmerAndroidBridge\Bridge\ShimmerScanManager.cs"
-				 Link="UnderTest\ShimmerScanManager.cs" />
+		<Compile Include="..\ShimmerAndroidBridge\Bridge\WsBridgeManager.cs" Link="UnderTest\WsBridgeManager.cs" />
+		<Compile Include="..\ShimmerAndroidBridge\Bridge\ShimmerScanManager.cs" Link="UnderTest\ShimmerScanManager.cs" />
 	</ItemGroup>
 
-	<!-- Nessun Include esplicito per Stubs\AndroidStubs.cs: lo prende lo SDK -->
-	<ItemGroup>
+	<!-- NON referenziare la DLL reale ShimmerAPI quando usi gli stub -->
+	<ItemGroup Condition="'$(UseTestStubs)'!='true'">
 		<ProjectReference Include="..\ShimmerAPI\ShimmerAPI.csproj" />
 	</ItemGroup>
-
 
 	<ItemGroup>
 		<None Update="xunit.runner.json">
