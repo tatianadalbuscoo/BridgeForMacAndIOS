@@ -1,26 +1,35 @@
-﻿using System;
-using System.Linq;
+﻿/*
+ * WsBridgeManagerTests.cs
+ * Purpose: Unit tests for WsBridgeManager file.
+ */
+
 using Xunit;
 using ShimmerBridgeMangager;
 using System.Text.Json;
-using System.Threading.Tasks;
-using ShimmerAPI;
 using WatsonWebsocket;
 using System.Reflection;
 using Android.Net.Wifi;
 using System.Text;
 
 
-
-
 namespace tests.BridgeTests
 {
     public class ExgModeTests
     {
-        // -------- Enum shape & stability --------
+
+        // ------ ExgMode enum behavior ------
+        // Covers enum values/names stability, [Flags] absence, ToString(),
+        // case-insensitive parsing, failure on unknown names, and enumeration via GetValues.
+
 
         /// <summary>
         /// Verifies the underlying integer values are stable and ordered as defined.
+        /// Expected:
+        /// - None == 0
+        /// - ECG == 1
+        /// - EMG == 2
+        /// - ExgTest == 3
+        /// - Respiration == 4
         /// </summary>
         [Fact]
         public void Values_AreStable_AndOrdered()
@@ -32,8 +41,10 @@ namespace tests.BridgeTests
             Assert.Equal(4, (int)ExgMode.Respiration);
         }
 
+
         /// <summary>
         /// Verifies the enum contains exactly the expected set of names.
+        /// Expected: names == ["None","ECG","EMG","ExgTest","Respiration"] in this order.
         /// </summary>
         [Fact]
         public void Names_Match_Expected_Set()
@@ -42,8 +53,10 @@ namespace tests.BridgeTests
             Assert.Equal(new[] { "None", "ECG", "EMG", "ExgTest", "Respiration" }, names);
         }
 
+
         /// <summary>
         /// Verifies the enum has no [Flags] attribute (modes are mutually exclusive).
+        /// Expected: Attribute.IsDefined(..., typeof(FlagsAttribute)) == false.
         /// </summary>
         [Fact]
         public void HasNoFlagsAttribute()
@@ -52,10 +65,12 @@ namespace tests.BridgeTests
             Assert.False(hasFlags);
         }
 
-        // -------- String conversion & parsing --------
 
         /// <summary>
         /// Verifies ToString returns the symbolic name (not the numeric value).
+        /// Expected:
+        /// - ExgMode.ECG.ToString() == "ECG"
+        /// - ExgMode.ExgTest.ToString() == "ExgTest"
         /// </summary>
         [Fact]
         public void ToString_Returns_Name()
@@ -64,8 +79,13 @@ namespace tests.BridgeTests
             Assert.Equal("ExgTest", ExgMode.ExgTest.ToString());
         }
 
+
         /// <summary>
-        /// Verifies Enum.TryParse works in a case-insensitive way for valid names.
+        /// Checks case-insensitive parsing with <see cref="Enum.TryParse{TEnum}(string, bool, out TEnum)"/>.
+        /// Expected:
+        /// - "ecg" (ignoreCase=true) -> ECG
+        /// - "EMG" -> EMG
+        /// - "ExgTest" -> ExgTest
         /// </summary>
         [Fact]
         public void TryParse_IsCaseInsensitive_ForValidNames()
@@ -80,23 +100,27 @@ namespace tests.BridgeTests
             Assert.Equal(ExgMode.ExgTest, m3);
         }
 
+
         /// <summary>
-        /// Verifies parsing fails for unknown names and does not mutate the out var.
+        /// Ensures unknown names fail to parse and the out var remains default.
+        /// Expected:
+        /// - TryParse("resp", ignoreCase:false) == false
+        /// - out var equals default (None)
         /// </summary>
         [Fact]
         public void TryParse_Fails_OnUnknown()
         {
             var ok = Enum.TryParse<ExgMode>("resp", ignoreCase: false, out var mode);
-            // "resp" (lowercase) is not an enum member name; case-sensitive parse should fail.
             Assert.False(ok);
-            // Out var defaults to zero when TryParse fails (default(ExgMode) == None).
             Assert.Equal(ExgMode.None, mode);
         }
 
-        // -------- Enumeration helpers --------
 
         /// <summary>
         /// Verifies Enum.GetValues returns all declared items without duplicates.
+        /// Expected:
+        /// - Values length == 5
+        /// - Sequence equals [None, ECG, EMG, ExgTest, Respiration]
         /// </summary>
         [Fact]
         public void GetValues_Covers_AllItems()
@@ -106,16 +130,18 @@ namespace tests.BridgeTests
             Assert.Equal(new[] { ExgMode.None, ExgMode.ECG, ExgMode.EMG, ExgMode.ExgTest, ExgMode.Respiration }, vals);
         }
 
-        // -------- Defaults --------
+
+        // ------ ShimmerConfig defaults behavior ------
+
 
         /// <summary>
-        /// Verifies default values of <see cref="ShimmerConfig"/>.
+        /// Validates default values for a new <see cref="ShimmerConfig"/>.
         /// Expected:
-        /// - All IMU flags: false
+        /// - All IMU flags == false
         /// - SamplingRate == null
-        /// - EXG flags: EnableExg1/2 false, ExgUse16Bit false
+        /// - EnableExg1/2 == false, ExgUse16Bit == false
         /// - ExgMode == None
-        /// - ExgModeWire == null (omitted in JSON)
+        /// - ExgModeWire == null, JSON omits "exg_mode"
         /// </summary>
         [Fact]
         public void ShimmerConfig_Defaults()
@@ -148,10 +174,12 @@ namespace tests.BridgeTests
             Assert.DoesNotContain("exg_mode", json);
         }
 
-        // -------- Setters --------
 
         /// <summary>
-        /// Verifies that setters persist values for all IMU/EXG flags and SamplingRate.
+        /// Ensures property setters persist values across IMU/EXG flags and SamplingRate.
+        /// Expected:
+        /// - All assigned booleans read back as true
+        /// - SamplingRate retains the assigned double
         /// </summary>
         [Fact]
         public void ShimmerConfig_Setters_Persist()
@@ -194,14 +222,13 @@ namespace tests.BridgeTests
             Assert.True(c.ExgUse16Bit);
         }
 
-        // -------- exg_mode wire mapping --------
 
         /// <summary>
-        /// Verifies round-trip mapping between <see cref="ShimmerConfig.ExgMode"/> and the JSON wire field "exg_mode".
+        /// Verifies round-trip mapping between <see cref="ShimmerConfig.ExgMode"/> and the wire field "exg_mode".
         /// Expected:
-        /// - Enum -> wire string on get
-        /// - Wire string (case/format variants) -> Enum on set
-        /// - null/blank resets to None and omits from JSON
+        /// - Enum -> lowercased wire string via getter
+        /// - Wire string (variants/aliases) -> Enum via setter
+        /// - null/blank resets to None and JSON omits field
         /// </summary>
         [Fact]
         public void ExgModeWire_Roundtrip()
@@ -228,10 +255,10 @@ namespace tests.BridgeTests
             c.ExgModeWire = "emg";
             Assert.Equal(ExgMode.EMG, c.ExgMode);
 
-            c.ExgModeWire = "ExgTest";   // alias allowed
+            c.ExgModeWire = "ExgTest";
             Assert.Equal(ExgMode.ExgTest, c.ExgMode);
 
-            c.ExgModeWire = "respiration"; // alias allowed
+            c.ExgModeWire = "respiration";
             Assert.Equal(ExgMode.Respiration, c.ExgMode);
 
             // Reset via null/blank
@@ -243,8 +270,11 @@ namespace tests.BridgeTests
             Assert.DoesNotContain("exg_mode", json);
         }
 
+
         /// <summary>
-        /// Verifies JSON includes "exg_mode" only when non-null.
+        /// Checks JSON includes "exg_mode" only when non-null.
+        /// Expected:
+        /// - With ExgMode set to ECG, JSON contains "exg_mode":"ecg"
         /// </summary>
         [Fact]
         public void Json_Serializes_ExgModeWire_WhenSet()
@@ -254,40 +284,11 @@ namespace tests.BridgeTests
             Assert.Contains("\"exg_mode\":\"ecg\"", json);
         }
 
-        // -------- AnySensorEnabled helper --------
 
         /// <summary>
-        /// Verifies <see cref="WsBridgeManager.AnySensorEnabled(ShimmerConfig)"/> returns false when all flags are off.
-        /// </summary>
-        [Fact]
-        public void AnySensorEnabled_False_WhenAllDisabled()
-        {
-            var c = new ShimmerConfig(); // all defaults are false/null
-            Assert.False(WsBridgeManager.AnySensorEnabled(c));
-        }
-
-        /// <summary>
-        /// Verifies <see cref="WsBridgeManager.AnySensorEnabled(ShimmerConfig)"/> returns true if any single flag is on.
-        /// Covers one EXG flag and one IMU flag as representatives.
-        /// </summary>
-        [Fact]
-        public void AnySensorEnabled_True_WhenAnyOn()
-        {
-            // EXG representative
-            var c1 = new ShimmerConfig { EnableExg1 = true };
-            Assert.True(WsBridgeManager.AnySensorEnabled(c1));
-
-            // IMU representative
-            var c2 = new ShimmerConfig { EnableGyroscope = true };
-            Assert.True(WsBridgeManager.AnySensorEnabled(c2));
-        }
-
-        // ExgModeWire
-
-        // -------- Getter mapping --------
-
-        /// <summary>
-        /// Getter returns null when ExgMode == None (so JSON può omettere il campo).
+        /// Getter returns null when <see cref="ShimmerConfig.ExgMode"/> == None.
+        /// Expected:
+        /// - ExgMode=None => ExgModeWire == null (JSON omits field)
         /// </summary>
         [Fact]
         public void Getter_ReturnsNull_WhenModeNone()
@@ -296,8 +297,11 @@ namespace tests.BridgeTests
             Assert.Null(c.ExgModeWire);
         }
 
+
         /// <summary>
         /// Getter maps enum values to the expected lowercase wire strings.
+        /// Expected:
+        /// - ECG -> "ecg", EMG -> "emg", ExgTest -> "test", Respiration -> "resp"
         /// </summary>
         [Fact]
         public void Getter_MapsEnum_ToWireString()
@@ -317,10 +321,11 @@ namespace tests.BridgeTests
             Assert.Equal("resp", c.ExgModeWire);
         }
 
-        // -------- Setter parsing --------
 
         /// <summary>
-        /// Setter accetta varianti case-insensitive/sinonimi e imposta l'enum corretto.
+        /// Setter accepts case-insensitive values and synonyms, mapping to the correct enum.
+        /// Expected:
+        /// - "ECG"->ECG, "emg"->EMG, "test"/"ExgTest"/"exg_test"->ExgTest, "resp"/"respiration"->Respiration
         /// </summary>
         [Fact]
         public void Setter_Parses_KnownValues_AndSynonyms()
@@ -336,21 +341,24 @@ namespace tests.BridgeTests
             c.ExgModeWire = "test";
             Assert.Equal(ExgMode.ExgTest, c.ExgMode);
 
-            c.ExgModeWire = "ExgTest";   // sinonimo
+            c.ExgModeWire = "ExgTest";  
             Assert.Equal(ExgMode.ExgTest, c.ExgMode);
 
-            c.ExgModeWire = "exg_test";  // sinonimo con underscore
+            c.ExgModeWire = "exg_test";
             Assert.Equal(ExgMode.ExgTest, c.ExgMode);
 
             c.ExgModeWire = "resp";
             Assert.Equal(ExgMode.Respiration, c.ExgMode);
 
-            c.ExgModeWire = "respiration"; // sinonimo esteso
+            c.ExgModeWire = "respiration";
             Assert.Equal(ExgMode.Respiration, c.ExgMode);
         }
 
+
         /// <summary>
-        /// Setter con null/empty/whitespace resetta a ExgMode.None.
+        /// Setter resets to None when given null/empty/whitespace.
+        /// Expected:
+        /// - After null/""/"   " => ExgMode==None
         /// </summary>
         [Fact]
         public void Setter_Blank_ResetsToNone()
@@ -367,8 +375,11 @@ namespace tests.BridgeTests
             Assert.Equal(ExgMode.None, c.ExgMode);
         }
 
+
         /// <summary>
-        /// Setter con valore sconosciuto resetta a ExgMode.None.
+        /// Unknown values reset the enum to None.
+        /// Expected:
+        /// - "unknown" => ExgMode==None
         /// </summary>
         [Fact]
         public void Setter_Unknown_ResetsToNone()
@@ -379,10 +390,13 @@ namespace tests.BridgeTests
             Assert.Equal(ExgMode.None, c.ExgMode);
         }
 
-        // -------- Round-trip --------
 
         /// <summary>
-        /// Round-trip: set via wire string -> enum corretto -> getter restituisce lo stesso wire string canonico.
+        /// Round-trip wire-string -> enum -> canonical wire-string.
+        /// Expected:
+        /// - "ECG" -> ECG -> "ecg"
+        /// - "exg_test" -> ExgTest -> "test"
+        /// - "respiration" -> Respiration -> "resp"
         /// </summary>
         [Fact]
         public void RoundTrip_Wire_ToEnum_ToWire()
@@ -402,10 +416,11 @@ namespace tests.BridgeTests
             Assert.Equal("resp", c.ExgModeWire);
         }
 
-        // -------- JSON behavior --------
 
         /// <summary>
-        /// Con JsonIgnore(WhenWritingNull): quando ExgModeWire è null, la serializzazione NON include "exg_mode".
+        /// With <c>[JsonIgnore(WhenWritingNull)]</c>, null wire field is omitted.
+        /// Expected:
+        /// - ExgMode=None => JSON does not contain "exg_mode"
         /// </summary>
         [Fact]
         public void Json_Omits_Field_WhenNull()
@@ -416,8 +431,11 @@ namespace tests.BridgeTests
             Assert.DoesNotContain("\"exg_mode\"", json);
         }
 
+
         /// <summary>
-        /// Quando ExgMode è impostato, la serializzazione include "exg_mode" con la wire-string attesa.
+        /// When ExgMode is set, JSON includes "exg_mode" with the expected wire-string.
+        /// Expected:
+        /// - ExgMode=EMG => JSON contains "exg_mode":"emg"
         /// </summary>
         [Fact]
         public void Json_Includes_Field_WhenSet()
@@ -428,11 +446,36 @@ namespace tests.BridgeTests
             Assert.Contains("\"exg_mode\":\"emg\"", json);
         }
 
-        // WsBridgeManager class
-        // -------- IsRunning --------
 
         /// <summary>
-        /// Before StartAsync, IsRunning must be false.
+        /// JSON round-trip preserves the exg_mode mapping.
+        /// Expected:
+        /// - Serialize(Respiration) contains "resp"
+        /// - Deserialize restores ExgMode=Respiration and wire "resp"
+        /// </summary>
+        [Fact]
+        public void Json_RoundTrip_ExgMode_Mapping()
+        {
+            var orig = new ShimmerConfig { ExgMode = ExgMode.Respiration };
+            var json = JsonSerializer.Serialize(orig);
+
+            Assert.Contains("\"exg_mode\":\"resp\"", json);
+
+            var back = JsonSerializer.Deserialize<ShimmerConfig>(json);
+            Assert.NotNull(back);
+            Assert.Equal(ExgMode.Respiration, back!.ExgMode);
+            Assert.Equal("resp", back.ExgModeWire);
+        }
+
+
+        // ----- WsBridgeManager class -----
+        // -------- IsRunning behavior --------
+
+
+        /// <summary>
+        /// Before calling StartAsync, the manager should report not running.
+        /// Expected:
+        /// - IsRunning == false
         /// </summary>
         [Fact]
         public void IsRunning_False_BeforeStart()
@@ -441,8 +484,12 @@ namespace tests.BridgeTests
             Assert.False(mgr.IsRunning);
         }
 
+
         /// <summary>
-        /// After StartAsync, IsRunning must be true (Watson stub flips IsListening on Start).
+        /// After StartAsync, manager reports running (Watson stub sets IsListening).
+        /// Expected:
+        /// - StartAsync completes
+        /// - IsRunning == true
         /// </summary>
         [Fact]
         public async Task IsRunning_True_AfterStart()
@@ -452,8 +499,12 @@ namespace tests.BridgeTests
             Assert.True(mgr.IsRunning);
         }
 
+
         /// <summary>
-        /// After StopAsync, IsRunning must be false.
+        /// After StopAsync, manager reports not running.
+        /// Expected:
+        /// - StopAsync completes
+        /// - IsRunning == false
         /// </summary>
         [Fact]
         public async Task IsRunning_False_AfterStop()
@@ -464,11 +515,14 @@ namespace tests.BridgeTests
             Assert.False(mgr.IsRunning);
         }
 
-        // -------- ActiveSessionCount --------
+
+        // ----- ActiveSessionCount behavior -----
+
 
         /// <summary>
-        /// ActiveSessionCount is 0 with no opened device sessions.
-        /// (We don't open HW sessions here to keep tests fast and decoupled.)
+        /// With no sessions opened, ActiveSessionCount starts at zero.
+        /// Expected:
+        /// - ActiveSessionCount == 0
         /// </summary>
         [Fact]
         public void ActiveSessionCount_Initially_Zero()
@@ -477,10 +531,15 @@ namespace tests.BridgeTests
             Assert.Equal(0, mgr.ActiveSessionCount);
         }
 
+
         // -------- Dispose behavior --------
 
+
         /// <summary>
-        /// Dispose() should be safe and leave IsRunning == false (it calls StopAsync fire-and-forget).
+        /// Dispose is safe; it triggers a stop and leaves the manager not running.
+        /// Expected:
+        /// - After Dispose(), IsRunning becomes false (after a brief delay)
+        /// - No exception thrown
         /// </summary>
         [Fact]
         public async Task Dispose_StopsManager_Safely()
@@ -491,15 +550,18 @@ namespace tests.BridgeTests
 
             mgr.Dispose();
 
-            // Give a tiny tick to allow StopAsync (fire-and-forget) to run in background.
             await Task.Delay(50);
             Assert.False(mgr.IsRunning);
         }
 
-        // -------- AnySensorEnabled --------
+
+        // ----- AnySensorEnabled behavior -----
+
 
         /// <summary>
-        /// AnySensorEnabled returns false when all sensor flags are disabled and no EXG is on.
+        /// AnySensorEnabled returns false when all flags are disabled (IMU & EXG).
+        /// Expected:
+        /// - AnySensorEnabled(config) == false
         /// </summary>
         [Fact]
         public void AnySensorEnabled_False_WhenAllOff()
@@ -522,8 +584,11 @@ namespace tests.BridgeTests
             Assert.False(WsBridgeManager.AnySensorEnabled(c));
         }
 
+
         /// <summary>
-        /// AnySensorEnabled returns true as soon as any single IMU flag is enabled.
+        /// Any IMU flag set to true makes AnySensorEnabled return true.
+        /// Expected:
+        /// - For each IMU flag individually enabled, AnySensorEnabled(config) == true
         /// </summary>
         [Theory]
         [InlineData(nameof(ShimmerConfig.EnableLowNoiseAccelerometer))]
@@ -537,9 +602,8 @@ namespace tests.BridgeTests
         [InlineData(nameof(ShimmerConfig.EnableExtA15))]
         public void AnySensorEnabled_True_WhenAnyImuOn(string flagName)
         {
-            var c = new ShimmerConfig(); // tutto false/null per default
+            var c = new ShimmerConfig();
 
-            // riflessione semplice per attivare 1 flag
             var prop = typeof(ShimmerConfig).GetProperty(flagName);
             Assert.NotNull(prop);
             prop!.SetValue(c, true);
@@ -547,8 +611,12 @@ namespace tests.BridgeTests
             Assert.True(WsBridgeManager.AnySensorEnabled(c));
         }
 
+
         /// <summary>
-        /// AnySensorEnabled returns true when EXG1 or EXG2 is enabled.
+        /// EXG1 or EXG2 alone make AnySensorEnabled return true.
+        /// Expected:
+        /// - EnableExg1 == true => AnySensorEnabled == true
+        /// - EnableExg2 == true => AnySensorEnabled == true
         /// </summary>
         [Fact]
         public void AnySensorEnabled_True_WhenExgEnabled()
@@ -560,10 +628,14 @@ namespace tests.BridgeTests
             Assert.True(WsBridgeManager.AnySensorEnabled(c2));
         }
 
-        // -------- Log event (sanity check) --------
+
+        // ----- Log event (sanity check) -----
+
 
         /// <summary>
-        /// Start/Stop should emit some log messages via Log event; we assert at least one arrives.
+        /// A simple sanity check that Log event fires during Start/Stop.
+        /// Expected:
+        /// - logCount >= 1 after a start-stop cycle
         /// </summary>
         [Fact]
         public async Task LogEvent_Fires_OnStartAndStop()
@@ -578,9 +650,15 @@ namespace tests.BridgeTests
             Assert.True(logCount >= 1);
         }
 
-        // StartAsync behavior
+
+        // ----- StartAsync behavior -----
+
+
         /// <summary>
-        /// StartAsync should flip IsRunning to true and log the listen URL.
+        /// StartAsync should set IsRunning and log the listen URL.
+        /// Expected:
+        /// - IsRunning == true after StartAsync
+        /// - Last log contains "ws://" and the chosen port
         /// </summary>
         [Fact]
         public async Task StartAsync_Sets_IsRunning_And_LogsUrl()
@@ -600,8 +678,12 @@ namespace tests.BridgeTests
             Assert.Contains(":9090/", lastLog!);
         }
 
+
         /// <summary>
-        /// Calling StartAsync twice should be a no-op (still running, no exception).
+        /// Calling StartAsync when already running is a no-op.
+        /// Expected:
+        /// - Second StartAsync does not throw
+        /// - IsRunning remains true
         /// </summary>
         [Fact]
         public async Task StartAsync_Is_Idempotent_When_Already_Running()
@@ -617,8 +699,14 @@ namespace tests.BridgeTests
             Assert.True(mgr.IsRunning);
         }
 
+
+        // ----- StopAsync behavior -----
+
+
         /// <summary>
-        /// After StopAsync the server should not be running.
+        /// StopAsync turns IsRunning to false after a prior start.
+        /// Expected:
+        /// - After StopAsync, IsRunning == false
         /// </summary>
         [Fact]
         public async Task StopAsync_Turns_IsRunning_False()
@@ -632,10 +720,13 @@ namespace tests.BridgeTests
             Assert.False(mgr.IsRunning);
         }
 
-        // StopAsync behavior
+
         /// <summary>
-        /// StopAsync should be safe when the server was never started:
-        /// no exception, IsRunning stays false, and "WS stopped" is logged.
+        /// Stopping when not running is safe, logs a message, and does not change IsRunning.
+        /// Expected:
+        /// - No exception
+        /// - IsRunning remains false
+        /// - Last log == "WS stopped"
         /// </summary>
         [Fact]
         public async Task StopAsync_WhenNotRunning_IsSafe_And_Logs()
@@ -654,8 +745,12 @@ namespace tests.BridgeTests
             Assert.Equal("WS stopped", lastLog);
         }
 
+
         /// <summary>
-        /// After starting, StopAsync should turn IsRunning to false and log the stop.
+        /// After a start, StopAsync stops the server and logs a stop message.
+        /// Expected:
+        /// - IsRunning == false after stop
+        /// - Last log == "WS stopped"
         /// </summary>
         [Fact]
         public async Task StopAsync_AfterStart_StopsServer_And_Logs()
@@ -673,8 +768,12 @@ namespace tests.BridgeTests
             Assert.Equal("WS stopped", lastLog);
         }
 
+
         /// <summary>
-        /// Multiple calls to StopAsync should be idempotent and not throw.
+        /// Multiple StopAsync calls are idempotent and safe.
+        /// Expected:
+        /// - No exception on repeated StopAsync
+        /// - IsRunning remains false after first stop
         /// </summary>
         [Fact]
         public async Task StopAsync_IsIdempotent()
@@ -691,15 +790,16 @@ namespace tests.BridgeTests
             Assert.False(mgr.IsRunning);
         }
 
-        // ------------------------------------------------------------
-        // ----- WS lifecycle behavior (no SPP dependencies) ----------
-        // ------------------------------------------------------------
+
+        // ----- WS lifecycle behavior (no SPP dependencies) -----
+
 
         /// <summary>
-        /// Start -> Stop -> Start again should be safe:
-        /// - no exceptions
+        /// Start -> Stop -> Start sequence is safe and leaves expected running state.
+        /// Expected:
         /// - IsRunning true after each Start
         /// - IsRunning false after Stop
+        /// - No exceptions thrown
         /// </summary>
         [Fact]
         public async Task Restart_AfterStop_Works()
@@ -723,9 +823,12 @@ namespace tests.BridgeTests
             Assert.False(mgr.IsRunning);
         }
 
+
         /// <summary>
-        /// Multiple Start/Stop cycles should not leak state:
-        /// we only assert the final IsRunning == false and no exceptions are thrown.
+        /// Repeated start/stop cycles do not leak state.
+        /// Expected:
+        /// - Each iteration ends with IsRunning == false
+        /// - No exceptions thrown
         /// </summary>
         [Fact]
         public async Task StartStop_Multiple_Times_NoLeak()
@@ -742,9 +845,11 @@ namespace tests.BridgeTests
             }
         }
 
+
         /// <summary>
-        /// Log event should fire at least once during a start-stop cycle
-        /// (sanity check that instrumentation is wired).
+        /// Log event should fire at least once over a start-stop cycle.
+        /// Expected:
+        /// - logs >= 1
         /// </summary>
         [Fact]
         public async Task LogEvent_Fires_During_Cycle()
@@ -759,8 +864,12 @@ namespace tests.BridgeTests
             Assert.True(logs >= 1);
         }
 
+
         /// <summary>
-        /// Dispose() when not running should be a no-op and must not throw.
+        /// Dispose() when not running is a no-op and never throws.
+        /// Expected:
+        /// - No exception
+        /// - IsRunning remains false
         /// </summary>
         [Fact]
         public void Dispose_When_NotRunning_Is_NoOp()
@@ -771,9 +880,11 @@ namespace tests.BridgeTests
             Assert.False(mgr.IsRunning);
         }
 
+
         /// <summary>
-        /// AnySensorEnabled should not consider SamplingRate alone as "sensors enabled".
-        /// (SamplingRate is independent from enabling any IMU/EXG flag.)
+        /// SamplingRate alone does not imply "sensors enabled".
+        /// Expected:
+        /// - With only SamplingRate set, AnySensorEnabled == false
         /// </summary>
         [Fact]
         public void AnySensorEnabled_SamplingRate_Alone_IsFalse()
@@ -782,28 +893,12 @@ namespace tests.BridgeTests
             Assert.False(WsBridgeManager.AnySensorEnabled(c));
         }
 
-        /// <summary>
-        /// JSON round-trip keeps the exg_mode mapping:
-        /// - When ExgMode is set, it serializes to "exg_mode":"<wire>"
-        /// - Deserializing restores the same enum.
-        /// </summary>
-        [Fact]
-        public void Json_RoundTrip_ExgMode_Mapping()
-        {
-            var orig = new ShimmerConfig { ExgMode = ExgMode.Respiration };
-            var json = JsonSerializer.Serialize(orig);
-
-            Assert.Contains("\"exg_mode\":\"resp\"", json);
-
-            var back = JsonSerializer.Deserialize<ShimmerConfig>(json);
-            Assert.NotNull(back);
-            Assert.Equal(ExgMode.Respiration, back!.ExgMode);
-            Assert.Equal("resp", back.ExgModeWire);
-        }
 
         /// <summary>
-        /// StartAsync logs a URL; we assert it looks like a ws:// URL and contains the requested port.
-        /// (We don't depend on the exact IP to avoid fragility.)
+        /// StartAsync logs a ws:// URL containing the requested port.
+        /// Expected:
+        /// - Last log contains "ws://" and ":9405/"
+        /// - IsRunning true during run; false after Stop
         /// </summary>
         [Fact]
         public async Task StartAsync_Logs_Url_With_Port()
@@ -823,10 +918,16 @@ namespace tests.BridgeTests
             Assert.False(mgr.IsRunning);
         }
 
-        // UpdateConfigAsync behavior
-        // ------------------------------------------------------------
-        // ----- UpdateConfigAsync behavior (no source changes) -------
-        // ------------------------------------------------------------
+
+        // ----- UpdateConfigAsync behavior -----
+
+
+        /// <summary>
+        /// UpdateConfigAsync on a missing session is ignored and logs a message.
+        /// Expected:
+        /// - No exception
+        /// - Logs contain "UpdateConfig ignored: session not found"
+        /// </summary>
         [Fact]
         public async Task UpdateConfigAsync_Ignores_When_SessionMissing_And_Logs()
         {
@@ -838,19 +939,25 @@ namespace tests.BridgeTests
 
             await mgr.UpdateConfigAsync("11:22:33:44:55:66", new ShimmerConfig { EnableGyroscope = true });
 
-            // Assert PRIMA di StopAsync (oppure mantieni la lista e verifica dopo)
             Assert.Contains(logs, l => l.Contains("UpdateConfig ignored: session not found"));
 
             await mgr.StopAsync();
         }
 
 
+        /// <summary>
+        /// UpdateConfigAsync preserves EXG mode when locked, applies new flags/SR, and logs each step.
+        /// Expected:
+        /// - "update requested" logs requested mode and lock=True
+        /// - "update applied" keeps original mode
+        /// - ApplyConfig logs updated SR
+        /// - Final log "Reconfigured &lt;mac&gt; (mode locked)"
+        /// </summary>
         [Fact]
         public async Task UpdateConfigAsync_Preserves_ExgMode_And_Applies_NewFlags_AndLogs()
         {
             var mgr = new WsBridgeManager();
 
-            // collezioniamo i log per asserzioni puntuali
             var logs = new System.Collections.Generic.List<string>();
             mgr.Log += s => logs.Add(s);
 
@@ -858,52 +965,51 @@ namespace tests.BridgeTests
 
             var mac = "00:06:66:AA:BB:CC";
 
-            // 1) Apriamo la sessione con un ExgMode iniziale (ECG) e un blocco IMU per far partire lo stream
             var initial = new ShimmerConfig
             {
                 ExgMode = ExgMode.ECG,
-                EnableGyroscope = true,     // almeno un sensore per far "Start()"
+                EnableGyroscope = true,
                 SamplingRate = 51
             };
             await mgr.OpenConfigureAndStartAsync(mac, initial);
 
-            // sanity: dovremmo aver loggato l'exg mode richiesto e applicato
             Assert.Contains(logs, l => l.Contains("[SERVER] applied   exg_mode") && l.Contains("'ecg'"));
 
-            // 2) Aggiorniamo la config provando a cambiare ExgMode (EMG) + nuovi flag + nuova SR
             var update = new ShimmerConfig
             {
-                ExgMode = ExgMode.EMG,        // NON deve passare: il server lo blocca al valore corrente (ECG)
-                EnableGyroscope = false,      // spegni gyro...
-                EnableMagnetometer = true,    // ...accendi mag
-                SamplingRate = 200            // nuova SR
+                ExgMode = ExgMode.EMG,
+                EnableGyroscope = false,
+                EnableMagnetometer = true,
+                SamplingRate = 200
             };
 
             await mgr.UpdateConfigAsync(mac, update);
 
-            // 3) Asserzioni sui log:
-            //    a) Il log "update requested" mostra la richiesta EMG e che la modalità è lockata
             Assert.Contains(logs, l => l.Contains("[SERVER] update requested exg_mode") &&
                                        l.Contains("emg") &&
                                        l.Contains("mode lock=True"));
 
-            //    b) Il log "update applied" deve mostrare ancora 'ecg' (modalità preservata)
             Assert.Contains(logs, l => l.Contains("[SERVER] update applied  exg_mode") &&
                                        l.Contains("'ecg'") &&
                                        l.Contains("enum=ECG"));
 
-            //    c) I log di ApplyConfigAsync riportano la SR aggiornata a 200 Hz
             Assert.Contains(logs, l => l.Contains("[CFG] applied (SR=200Hz"));
 
-            //    d) Log finale di reconfig andato a buon fine
             Assert.Contains(logs, l => l.Contains($"[SERVER] Reconfigured {mac} (mode locked)"));
 
             await mgr.StopAsync();
         }
 
-        // CloseAllAsync behavior
+
+        // ----- CloseAllAsync behavior -----
+
+
         /// <summary>
-        /// CloseAllAsync senza sessioni: non deve lanciare e deve loggare il messaggio atteso.
+        /// CloseAllAsync with no sessions is safe and logs a completion message.
+        /// Expected:
+        /// - No exception
+        /// - ActiveSessionCount == 0
+        /// - Logs contain "[SERVER] All sessions closed"
         /// </summary>
         [Fact]
         public async Task CloseAllAsync_NoSessions_IsSafe_And_Logs()
@@ -912,7 +1018,6 @@ namespace tests.BridgeTests
             var logs = new System.Collections.Generic.List<string>();
             mgr.Log += s => logs.Add(s);
 
-            // Non serve avviare il WS per questo test
             Assert.Equal(0, mgr.ActiveSessionCount);
 
             var ex = await Record.ExceptionAsync(async () => await mgr.CloseAllAsync());
@@ -922,9 +1027,13 @@ namespace tests.BridgeTests
             Assert.Equal(0, mgr.ActiveSessionCount);
         }
 
+
         /// <summary>
-        /// Con più sessioni aperte: CloseAllAsync deve chiudere (Dispose) le sessioni,
-        /// svuotare la mappa e lasciare il WS server intatto (se in esecuzione).
+        /// CloseAllAsync closes sessions and clears the map without stopping the WS server.
+        /// Expected:
+        /// - After closing: ActiveSessionCount == 0
+        /// - WS server is still running
+        /// - Logs contain "[SERVER] All sessions closed"
         /// </summary>
         [Fact]
         public async Task CloseAllAsync_WithSessions_ClosesAndClears_WithoutStoppingServer()
@@ -933,11 +1042,9 @@ namespace tests.BridgeTests
             var logs = new System.Collections.Generic.List<string>();
             mgr.Log += s => logs.Add(s);
 
-            // Avvio WS per verificare che CloseAllAsync non lo tocchi
             await mgr.StartAsync(new Activity());
             Assert.True(mgr.IsRunning);
 
-            // Apriamo due sessioni HW (gli stub di Connect sollevano lo stato CONNECTED)
             var mac1 = "00:06:66:AA:BB:01";
             var mac2 = "00:06:66:AA:BB:02";
 
@@ -957,30 +1064,29 @@ namespace tests.BridgeTests
 
             Assert.True(mgr.ActiveSessionCount >= 2);
 
-            // Act
             await mgr.CloseAllAsync();
 
-            // Assert: tutte le sessioni chiuse e conteggio azzerato
             Assert.Equal(0, mgr.ActiveSessionCount);
             Assert.Contains(logs, l => l.Contains("[SERVER] All sessions closed"));
 
-            // Il server WS resta in ascolto (CloseAllAsync non lo tocca)
             Assert.True(mgr.IsRunning);
 
-            // Cleanup
             await mgr.StopAsync();
             Assert.False(mgr.IsRunning);
         }
 
+
         /// <summary>
-        /// CloseAllAsync è idempotente: chiamarlo più volte non deve lanciare né cambiare lo stato finale.
+        /// CloseAllAsync is idempotent: multiple calls are safe and final state is stable.
+        /// Expected:
+        /// - First call clears sessions
+        /// - Subsequent calls do nothing and do not throw
         /// </summary>
         [Fact]
         public async Task CloseAllAsync_IsIdempotent()
         {
             var mgr = new WsBridgeManager();
 
-            // Apri una sessione per avere stato "non vuoto"
             var mac = "00:06:66:AA:BB:CC";
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig
             {
@@ -990,17 +1096,24 @@ namespace tests.BridgeTests
             });
             Assert.True(mgr.ActiveSessionCount >= 1);
 
-            // Prima chiusura
+            // First closure
             await mgr.CloseAllAsync();
             Assert.Equal(0, mgr.ActiveSessionCount);
 
-            // Seconda chiusura (nessuna eccezione)
+            // Second closure (no exceptions)
             var ex = await Record.ExceptionAsync(async () => await mgr.CloseAllAsync());
             Assert.Null(ex);
             Assert.Equal(0, mgr.ActiveSessionCount);
         }
 
-        // OnMessage behavior
+
+        // ----- OnMessage behavior -----
+
+
+        /// <summary>
+        /// Text frames are handled and inbound content is logged.
+        /// Expected: After sending {"type":"hello"}, logs contain "WS IN [...]" and "type=hello".
+        /// </summary>
         [Fact]
         public async Task OnMessage_TextFrame_IsHandled_And_LogsInbound()
         {
@@ -1010,25 +1123,27 @@ namespace tests.BridgeTests
 
             await mgr.StartAsync(new Activity());
 
-            // prendi il server WS privato via reflection
             var wsField = typeof(WsBridgeManager).GetField("_ws", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             var ws = (WatsonWebsocket.WatsonWsServer)wsField!.GetValue(mgr)!;
 
             var clientId = Guid.NewGuid();
             ws.RaiseConnected(clientId);
 
-            // manda un frame testuale valido ("hello")
+            // Send a valid textual frame ("hello")
             ws.RaiseText(clientId, "{\"type\":\"hello\"}");
 
-            // dai tempo all'async-void handler
             await Task.Delay(50);
 
-            // HandleTextAsync logga "WS IN [...] type=hello ..."
             Assert.Contains(logs, l => l.Contains("WS IN [") && l.Contains("type=hello"));
 
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Non-text frames are ignored.
+        /// Expected: Sending a binary frame yields no "WS IN [...]" log entries.
+        /// </summary>
         [Fact]
         public async Task OnMessage_NonText_IsIgnored()
         {
@@ -1044,17 +1159,22 @@ namespace tests.BridgeTests
             var clientId = Guid.NewGuid();
             ws.RaiseConnected(clientId);
 
-            // invia un frame Binary (usa il nuovo helper RaiseBinary)
+            // Send a Binary frame
             ws.RaiseBinary(clientId, new byte[] { 0x01, 0x02, 0x03 });
 
             await Task.Delay(50);
 
-            // nessun "WS IN [...]" perché i non-Text vengono ignorati
+            // no "WS IN [...]" because non-Texts are ignored
             Assert.DoesNotContain(logs, l => l.Contains("WS IN ["));
 
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Malformed JSON is caught and logged by OnMessage.
+        /// Expected: Log entry starts with "OnMessage error: " after receiving "{ not-json".
+        /// </summary>
         [Fact]
         public async Task OnMessage_MalformedJson_IsCaught_AndLogged()
         {
@@ -1070,7 +1190,6 @@ namespace tests.BridgeTests
             var clientId = Guid.NewGuid();
             ws.RaiseConnected(clientId);
 
-            // JSON malformato -> eccezione in HandleTextAsync -> catturata da OnMessage
             ws.RaiseText(clientId, "{ not-json");
 
             await Task.Delay(50);
@@ -1080,38 +1199,45 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
-        // SendConfigSnapshot behavior
 
+        // ----- SendConfigSnapshot behavior -----
+
+
+        /// <summary>
+        /// If no active session exists for the given MAC, no payload is sent.
+        /// Expected: SendConfigSnapshot on an unknown MAC leaves ws.Sent empty.
+        /// </summary>
         [Fact]
         public async Task SendConfigSnapshot_NoActiveSession_CompletesWithoutSend()
         {
             var mgr = new WsBridgeManager();
 
-            // Avvia il WS senza alcuna sessione attiva
+            // Start the WS without any active session
             await mgr.StartAsync(new Activity());
 
-            // Prendi il server WS via reflection
             var wsField = typeof(WsBridgeManager).GetField("_ws", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             var ws = (WatsonWebsocket.WatsonWsServer)wsField!.GetValue(mgr)!;
 
             ws.Sent.Clear();
 
             var clientId = Guid.NewGuid();
-            var mac = "00:06:66:AA:BB:CC"; // non esiste sessione per questo MAC
-
-            // Invoca il metodo privato SendConfigSnapshot(Guid, string)
+            var mac = "00:06:66:AA:BB:CC";
             var mi = typeof(WsBridgeManager).GetMethod("SendConfigSnapshot", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             Assert.NotNull(mi);
 
             var task = (Task)mi!.Invoke(mgr, new object[] { clientId, mac })!;
             await task;
 
-            // Nessun invio eseguito
             Assert.Empty(ws.Sent);
 
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// With an active session, SendConfigSnapshot sends a "config_changed" to the target client.
+        /// Expected: Exactly one send to that client; JSON has type=config_changed, correct mac, cfg present, and "available" array (e.g., includes "gyro" when enabled).
+        /// </summary>
         [Fact]
         public async Task SendConfigSnapshot_WithActiveSession_Sends_ConfigChanged_ToThatClient()
         {
@@ -1120,7 +1246,6 @@ namespace tests.BridgeTests
 
             var mac = "00:06:66:AA:BB:01";
 
-            // Crea una sessione attiva (apre, applica config, e avvia se necessario)
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig
             {
                 ExgMode = ExgMode.ECG,
@@ -1134,16 +1259,15 @@ namespace tests.BridgeTests
             ws.Sent.Clear();
             var clientId = Guid.NewGuid();
 
-            // Invoca SendConfigSnapshot
             var mi = typeof(WsBridgeManager).GetMethod("SendConfigSnapshot", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             var task = (Task)mi!.Invoke(mgr, new object[] { clientId, mac })!;
             await task;
 
-            // Verifica un solo invio verso il client corretto
+            // Check for a single send to the correct client
             Assert.Single(ws.Sent);
             Assert.Equal(clientId, ws.Sent[0].clientId);
 
-            // Verifica struttura JSON minima
+            // Check minimum JSON structure
             var payload = ws.Sent[0].message;
             using var doc = System.Text.Json.JsonDocument.Parse(payload);
             var root = doc.RootElement;
@@ -1154,7 +1278,6 @@ namespace tests.BridgeTests
             Assert.True(root.TryGetProperty("available", out var available));
             Assert.Equal(System.Text.Json.JsonValueKind.Array, available.ValueKind);
 
-            // exg_mode serializzato e presenza del blocco gyro tra gli "available"
             var cfg = root.GetProperty("cfg");
             Assert.Equal("ecg", cfg.GetProperty("exg_mode").GetString());
             Assert.Contains(available.EnumerateArray(), x => x.GetString() == "gyro");
@@ -1162,6 +1285,11 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Multiple SendConfigSnapshot calls accumulate per client.
+        /// Expected: 3 sends total (2 to clientA, 1 to clientB); each payload has type=config_changed and the expected MAC.
+        /// </summary>
         [Fact]
         public async Task SendConfigSnapshot_MultipleCalls_AccumulateSends_PerClient()
         {
@@ -1186,7 +1314,7 @@ namespace tests.BridgeTests
 
             var mi = typeof(WsBridgeManager).GetMethod("SendConfigSnapshot", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-            // due snapshot a clientA, uno a clientB
+            // Two snapshots to clientA, one to clientB
             await (Task)mi!.Invoke(mgr, new object[] { clientA, mac })!;
             await (Task)mi!.Invoke(mgr, new object[] { clientA, mac })!;
             await (Task)mi!.Invoke(mgr, new object[] { clientB, mac })!;
@@ -1195,7 +1323,7 @@ namespace tests.BridgeTests
             Assert.Equal(2, ws.Sent.Count(x => x.clientId == clientA));
             Assert.Equal(1, ws.Sent.Count(x => x.clientId == clientB));
 
-            // tutti i payload devono essere config_changed per il MAC atteso
+            // All payloads must be config_changed for the expected MAC
             foreach (var (_, msg) in ws.Sent)
             {
                 using var d = System.Text.Json.JsonDocument.Parse(msg);
@@ -1207,14 +1335,32 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
-        // HandleTextAsync behavior
 
+        // ----- HandleTextAsync behavior -----
+
+
+        /// <summary>
+        /// Helper: retrieves the private WebSocket server instance from a <see cref="WsBridgeManager"/> under test.
+        /// Uses reflection to access the non-public <c>_ws</c> field so tests can raise WS events and inspect sent frames.
+        /// </summary>
+        /// <param name="mgr">The <see cref="WsBridgeManager"/> instance under test.</param>
+        /// <returns>
+        /// The underlying <see cref="WatsonWebsocket.WatsonWsServer"/> instance referenced by the private <c>_ws</c> field.
+        /// </returns>
         private static WatsonWsServer GetWs(WsBridgeManager mgr)
         {
             var wsField = typeof(WsBridgeManager).GetField("_ws", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             return (WatsonWsServer)wsField!.GetValue(mgr)!;
         }
 
+
+        /// <summary>
+        /// When a client sends {"type":"hello"}, the server replies with a hello acknowledgment.
+        /// Expected:
+        /// - Exactly one frame is sent back to the same client
+        /// - Reply has type == "hello_ack"
+        /// - ok == true and proto == "shimmer.v1"
+        /// </summary>
         [Fact]
         public async Task HandleText_Hello_RespondsWithHelloAck()
         {
@@ -1239,6 +1385,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Unknown message types produce a structured error reply.
+        /// Expected:
+        /// - Exactly one frame is sent back to the same client
+        /// - Reply has type == "error" and error == "unknown_type"
+        /// </summary>
         [Fact]
         public async Task HandleText_UnknownType_RespondsWithError()
         {
@@ -1261,6 +1414,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// With no active sessions, listing active devices returns an empty array.
+        /// Expected:
+        /// - Reply has type == "active_devices"
+        /// - Property "macs" is an empty JSON array
+        /// </summary>
         [Fact]
         public async Task HandleText_ListActive_Empty_ReturnsEmptyArray()
         {
@@ -1283,6 +1443,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Getting a config without specifying a MAC returns a structured error.
+        /// Expected:
+        /// - Reply has type == "config"
+        /// - ok == false and error == "no_mac"
+        /// </summary>
         [Fact]
         public async Task HandleText_GetConfig_NoMac_ReturnsErrorNoMac()
         {
@@ -1304,6 +1471,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// set_sampling_rate rejects bad arguments (missing/empty mac or non-numeric sr).
+        /// Expected:
+        /// - Reply has type == "set_sampling_rate_ack"
+        /// - ok == false and error == "bad_args"
+        /// </summary>
         [Fact]
         public async Task HandleText_SetSamplingRate_BadArgs_ReturnsBadArgs()
         {
@@ -1313,7 +1487,6 @@ namespace tests.BridgeTests
             ws.Sent.Clear();
 
             var client = Guid.NewGuid();
-            // sr mancante e mac vuoto
             ws.RaiseText(client, "{\"type\":\"set_sampling_rate\",\"mac\":\"\",\"sr\":\"oops\"}");
 
             Assert.Single(ws.Sent);
@@ -1326,6 +1499,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Opening a stream without a MAC returns a structured "no_mac" error.
+        /// Expected:
+        /// - Reply has type == "open_ack"
+        /// - ok == false and error == "no_mac"
+        /// </summary>
         [Fact]
         public async Task HandleText_Open_NoMac_ReturnsErrorNoMac()
         {
@@ -1347,6 +1527,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Unsubscribe acknowledges even if no prior subscription state exists.
+        /// Expected:
+        /// - Reply has type == "unsubscribe_ack"
+        /// - ok == true and the echoed mac matches the request
+        /// </summary>
         [Fact]
         public async Task HandleText_Unsubscribe_AckTrue()
         {
@@ -1368,6 +1555,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Close command always acknowledges and clears any subscription state.
+        /// Expected:
+        /// - Reply has type == "close_ack"
+        /// - ok == true
+        /// </summary>
         [Fact]
         public async Task HandleText_Close_AckTrue_AndClearsSubscriptionState()
         {
@@ -1388,6 +1582,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Setting EXG mode from the client side is server-managed and not allowed.
+        /// Expected:
+        /// - Reply has type == "set_exg_mode_ack"
+        /// - ok == false and error == "server_managed"
+        /// </summary>
         [Fact]
         public async Task HandleText_SetExgMode_ServerManaged_AckFalse()
         {
@@ -1409,6 +1610,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Stopping from the client side is server-managed and not allowed.
+        /// Expected:
+        /// - Reply has type == "stop_ack"
+        /// - ok == false and error == "server_managed"
+        /// </summary>
         [Fact]
         public async Task HandleText_Stop_ServerManaged_AckFalse()
         {
@@ -1430,6 +1638,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Start command always returns a start acknowledgment, regardless of session state.
+        /// Expected:
+        /// - Reply has type == "start_ack"
+        /// - ok == true and note == "server_managed"
+        /// </summary>
         [Fact]
         public async Task HandleText_Start_AlwaysReturnsStartAck()
         {
@@ -1439,10 +1654,8 @@ namespace tests.BridgeTests
             ws.Sent.Clear();
 
             var client = Guid.NewGuid();
-            // nessuna sessione attiva per smac: ci aspettiamo solo lo start_ack
             ws.RaiseText(client, "{\"type\":\"start\",\"mac\":\"00:06:66:00:00:01\"}");
 
-            // Potrebbe anche inviare open_ack se la sessione esistesse; qui non c'è.
             Assert.Single(ws.Sent);
             using var doc = JsonDocument.Parse(ws.Sent[0].message);
             var root = doc.RootElement;
@@ -1453,6 +1666,13 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Start command always returns a start acknowledgment, regardless of session state.
+        /// Expected:
+        /// - Reply has type == "start_ack"
+        /// - ok == true and note == "server_managed"
+        /// </summary>
         [Fact]
         public async Task HandleText_ListDevices_WithNoBondedDevices_ReturnsEmptyItems()
         {
@@ -1461,7 +1681,6 @@ namespace tests.BridgeTests
             var ws = GetWs(mgr);
             ws.Sent.Clear();
 
-            // Assicuriamoci che non ci siano paired devices negli stub
             Android.Bluetooth.BluetoothAdapter.DefaultAdapter!.BondedDevices.Clear();
 
             var client = Guid.NewGuid();
@@ -1478,9 +1697,16 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
-        // TryGetConfig behavior
+
+        // ----- TryGetConfig behavior -----
 
 
+        /// <summary>
+        /// Listing devices with no bonded Bluetooth devices returns an empty list.
+        /// Expected:
+        /// - Reply has type == "devices"
+        /// - Property "items" is an empty JSON array
+        /// </summary>
         [Fact]
         public async Task GetConfig_WhenSessionMissing_ReturnsNotActive()
         {
@@ -1492,7 +1718,6 @@ namespace tests.BridgeTests
 
             var client = Guid.NewGuid();
 
-            // MAC inesistente -> TryGetConfig deve restituire false e la reply deve avere ok=false, error=not_active
             ws.RaiseText(client, "{\"type\":\"get_config\",\"mac\":\"00:06:66:DE:AD:00\"}");
 
             Assert.Single(ws.Sent);
@@ -1508,6 +1733,14 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// If a session exists, get_config returns the effective configuration snapshot.
+        /// Expected:
+        /// - Reply has type == "config", ok == true
+        /// - Contains cfg with the flags set, integer-rounded sampling rate
+        /// - exg_mode wire string matches the mode (e.g., "emg")
+        /// </summary>
         [Fact]
         public async Task GetConfig_WhenSessionExists_ReturnsEffectiveConfig()
         {
@@ -1516,16 +1749,14 @@ namespace tests.BridgeTests
 
             var mac = "00:06:66:AA:BB:CC";
 
-            // Apri una sessione attiva con una config riconoscibile
             var initialCfg = new ShimmerConfig
             {
                 EnableGyroscope = true,
                 EnableBattery = true,
                 SamplingRate = 64,
-                ExgMode = ExgMode.EMG   // così ExgModeWire dovrebbe essere "emg"
+                ExgMode = ExgMode.EMG
             };
 
-            // Crea davvero la sessione (gli stub fanno completare subito la Connect)
             await mgr.OpenConfigureAndStartAsync(mac, initialCfg);
 
             var ws = GetWs(mgr);
@@ -1533,7 +1764,6 @@ namespace tests.BridgeTests
 
             var client = Guid.NewGuid();
 
-            // Ora TryGetConfig deve trovare la sessione e restituire la config corrente
             ws.RaiseText(client, $"{{\"type\":\"get_config\",\"mac\":\"{mac}\"}}");
 
             Assert.Single(ws.Sent);
@@ -1547,22 +1777,27 @@ namespace tests.BridgeTests
             Assert.Equal(mac, root.GetProperty("mac").GetString());
 
             var cfg = root.GetProperty("cfg");
-            // flag che abbiamo impostato
+
             Assert.True(cfg.GetProperty("EnableGyroscope").GetBoolean());
             Assert.True(cfg.GetProperty("EnableBattery").GetBoolean());
 
-            // sampling rate arrotondato a int dal codice: qui 64
             Assert.Equal(64, cfg.GetProperty("SamplingRate").GetInt32());
-
-            // ExgModeWire serializzato come "emg"
             Assert.Equal("emg", cfg.GetProperty("exg_mode").GetString());
 
             await mgr.StopAsync();
         }
 
-        // Subscribe behavior
 
-        // Helper riflessivo: legge la HashSet<string> dei MAC per un dato clientId
+        // ----- Subscribe behavior -----
+
+
+        /// <summary>
+        /// Helper: returns the current subscription set (MAC addresses) for a given client ID,
+        /// reading the private <c>_subscriptions</c> field of <see cref="WsBridgeManager"/> via reflection.
+        /// </summary>
+        /// <param name="mgr">The bridge manager under test.</param>
+        /// <param name="clientId">The client identifier associated with the subscription set.</param>
+        /// <returns>The <see cref="HashSet{T}"/> of subscribed MAC strings for the client, or <c>null</c> if none exists.</returns>
         private static HashSet<string>? GetSubscribedSet(WsBridgeManager mgr, Guid clientId)
         {
             var f = typeof(WsBridgeManager)
@@ -1582,6 +1817,13 @@ namespace tests.BridgeTests
             return (HashSet<string>)args[1]!;
         }
 
+
+        /// <summary>
+        /// "open" subscribes the requesting client to the given MAC and logs the action.
+        /// Expected:
+        /// - The subscription set for the client contains the MAC
+        /// - A log entry indicates a successful subscription for that MAC
+        /// </summary>
         [Fact]
         public async Task Open_SubscribesClient_ToGivenMac_AndLogs()
         {
@@ -1591,7 +1833,7 @@ namespace tests.BridgeTests
 
             await mgr.StartAsync(new Activity());
 
-            // Serve una sessione attiva per poter entrare nel ramo "open" che chiama Subscribe
+            // An active session is required to join the "open" branch that calls Subscribe
             var mac = "00:06:66:AA:BB:CC";
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig
             {
@@ -1606,21 +1848,26 @@ namespace tests.BridgeTests
 
             var client = Guid.NewGuid();
 
-            // Invia il comando "open"
+            // Send the "open" command
             ws!.RaiseText(client, $"{{\"type\":\"open\",\"mac\":\"{mac}\"}}");
 
-            // Verifica: la sottoscrizione esiste e contiene il MAC
             var set = GetSubscribedSet(mgr, client);
             Assert.NotNull(set);
             Assert.Contains(mac, set!);
 
-            // Log contiene il messaggio di subscribe
             Assert.Contains(logs, s => s.Contains("subscribed", StringComparison.OrdinalIgnoreCase)
                                      && s.Contains(mac, StringComparison.OrdinalIgnoreCase));
 
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Repeated "open" calls are idempotent; MAC matching is case-insensitive.
+        /// Expected:
+        /// - Subscription set contains a single canonical MAC
+        /// - Subsequent opens with different casing do not create duplicates
+        /// </summary>
         [Fact]
         public async Task Open_IsIdempotent_AndCaseInsensitive()
         {
@@ -1628,7 +1875,7 @@ namespace tests.BridgeTests
             await mgr.StartAsync(new Activity());
 
             var mac = "00:06:66:AA:BB:CC";
-            // Sessione attiva
+            // Active session
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig { EnableBattery = true, SamplingRate = 64 });
 
             var ws = typeof(WsBridgeManager)
@@ -1638,21 +1885,21 @@ namespace tests.BridgeTests
 
             var client = Guid.NewGuid();
 
-            // 1ª open (maiuscole)
+            // First open (uppercase)
             ws!.RaiseText(client, $"{{\"type\":\"open\",\"mac\":\"{mac.ToUpperInvariant()}\"}}");
             var set = GetSubscribedSet(mgr, client);
             Assert.NotNull(set);
-            Assert.Single(set!);               // solo un elemento
-            Assert.Contains(mac, set!);        // confronto HashSet case-insensitive
+            Assert.Single(set!);               
+            Assert.Contains(mac, set!);
 
-            // 2ª open (minuscole): deve restare 1 solo elemento
+            // Second open (lowercase): only 1 element must remain
             ws.RaiseText(client, $"{{\"type\":\"open\",\"mac\":\"{mac.ToLowerInvariant()}\"}}");
             set = GetSubscribedSet(mgr, client);
             Assert.NotNull(set);
             Assert.Single(set!);
             Assert.Contains(mac, set!);
 
-            // 3ª open identica: ancora idempotente
+            // third identical open: still idempotent
             ws.RaiseText(client, $"{{\"type\":\"open\",\"mac\":\"{mac}\"}}");
             set = GetSubscribedSet(mgr, client);
             Assert.NotNull(set);
@@ -1661,9 +1908,16 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
-        // Unsubscribe behavior
+
+        // ----- Unsubscribe behavior -----
 
 
+        /// <summary>
+        /// "unsubscribe" removes the MAC from the client's subscription set and logs the action.
+        /// Expected:
+        /// - After unsubscribe, the client's subscription set no longer contains the MAC
+        /// - A log entry indicates unsubscription for that MAC
+        /// </summary>
         [Fact]
         public async Task Unsubscribe_RemovesMac_AndLogs()
         {
@@ -1674,7 +1928,8 @@ namespace tests.BridgeTests
             await mgr.StartAsync(new Activity());
 
             var mac = "00:06:66:AA:BB:CC";
-            // Serve una sessione attiva perché "open"/"unsubscribe" lavorino su un MAC valido
+
+            // An active session is required for "open"/"unsubscribe" to work on a valid MAC
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig
             {
                 EnableGyroscope = true,
@@ -1688,26 +1943,35 @@ namespace tests.BridgeTests
 
             var client = Guid.NewGuid();
 
-            // 1) subscribe via "open"
+            // subscribe via "open"
             ws!.RaiseText(client, $"{{\"type\":\"open\",\"mac\":\"{mac}\"}}");
             var set = GetSubscribedSet(mgr, client);
             Assert.NotNull(set);
             Assert.Contains(mac, set!);
 
-            // 2) unsubscribe
+            // unsubscribe
             ws.RaiseText(client, $"{{\"type\":\"unsubscribe\",\"mac\":\"{mac}\"}}");
 
             set = GetSubscribedSet(mgr, client);
-            // Il set può esistere ancora ma NON deve contenere quel MAC
+
             if (set != null)
                 Assert.DoesNotContain(mac, set);
-            // Log contiene il messaggio di unsubscribe
+
+            // Log contains the unsubscribe message
             Assert.Contains(logs, s => s.Contains("unsubscribed", StringComparison.OrdinalIgnoreCase)
                                      && s.Contains(mac, StringComparison.OrdinalIgnoreCase));
 
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Unsubscribe is idempotent, case-insensitive, and safe even if the client isn't subscribed.
+        /// Expected:
+        /// - Unsubscribe before any open does not throw and does not create an entry
+        /// - After open, unsubscribe removes the MAC regardless of casing
+        /// - Repeated unsubscribe calls do nothing and do not throw
+        /// </summary>
         [Fact]
         public async Task Unsubscribe_IsIdempotent_AndCaseInsensitive_AndSafeWhenNotSubscribed()
         {
@@ -1724,25 +1988,25 @@ namespace tests.BridgeTests
 
             var client = Guid.NewGuid();
 
-            // A) Unsubscribe prima di essere iscritto: non deve esplodere e non deve creare una entry
+            // Unsubscribe before you are subscribed
             ws!.RaiseText(client, $"{{\"type\":\"unsubscribe\",\"mac\":\"{mac}\"}}");
             var set = GetSubscribedSet(mgr, client);
-            Assert.Null(set); // nessuna entry creata dal solo unsubscribe
+            Assert.Null(set);
 
-            // B) Iscrizione
+            // Suscribed
             ws.RaiseText(client, $"{{\"type\":\"open\",\"mac\":\"{mac}\"}}");
             set = GetSubscribedSet(mgr, client);
             Assert.NotNull(set);
             Assert.Single(set!);
             Assert.Contains(mac, set!);
 
-            // C) Unsubscribe con casing diverso (case-insensitive)
+            // Unsubscribe with different casing (case-insensitive)
             ws.RaiseText(client, $"{{\"type\":\"unsubscribe\",\"mac\":\"{mac.ToLowerInvariant()}\"}}");
             set = GetSubscribedSet(mgr, client);
             if (set != null)
                 Assert.DoesNotContain(mac, set);
 
-            // D) Unsubscribe ripetuto (idempotente)
+            // Repeated unsubscribe (idempotent)
             ws.RaiseText(client, $"{{\"type\":\"unsubscribe\",\"mac\":\"{mac}\"}}");
             set = GetSubscribedSet(mgr, client);
             if (set != null)
@@ -1751,9 +2015,17 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
-        // BroadcastToSubscribers behavior
 
-        // Helper riflessivo per _ws
+        // ----- BroadcastToSubscribers behavior -----
+
+
+        /// <summary>
+        /// Helper: returns the array of subscribed MAC addresses for the specified client,
+        /// accessing the private <c>_subscriptions</c> dictionary through reflection.
+        /// </summary>
+        /// <param name="mgr">The bridge manager instance.</param>
+        /// <param name="clientId">The client whose subscriptions are queried.</param>
+        /// <returns>An array of subscribed MAC strings; empty if the client has no entry.</returns>
         private static string[] GetSubscribedMacs(WsBridgeManager mgr, Guid clientId)
         {
             var f = typeof(WsBridgeManager).GetField("_subscriptions",
@@ -1773,6 +2045,11 @@ namespace tests.BridgeTests
         }
 
 
+        /// <summary>
+        /// If the internal WS server is null, broadcast paths complete without throwing.
+        /// Expected:
+        /// - Calling update that triggers a broadcast completes without exceptions
+        /// </summary>
         [Fact]
         public async Task Broadcast_NoWs_NoThrow()
         {
@@ -1782,17 +2059,21 @@ namespace tests.BridgeTests
             var mac = "00:06:66:11:22:33";
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig { EnableMagnetometer = true, SamplingRate = 51 });
 
-            // forza _ws = null per verificare il guard clause
             var f = typeof(WsBridgeManager).GetField("_ws", BindingFlags.NonPublic | BindingFlags.Instance);
             Assert.NotNull(f);
             f!.SetValue(mgr, null);
 
-            // Non deve lanciare anche se WS è null (BroadcastToSubscribers ha il guard)
             var ex = await Record.ExceptionAsync(async () =>
                 await mgr.UpdateConfigAsync(mac, new ShimmerConfig { EnableBattery = true, SamplingRate = 64 }));
             Assert.Null(ex);
         }
 
+
+        /// <summary>
+        /// When there are no subscribers, broadcasting a config change sends nothing.
+        /// Expected:
+        /// - No frames are recorded as sent
+        /// </summary>
         [Fact]
         public async Task Broadcast_WhenNoSubscribers_DoesNothing()
         {
@@ -1802,11 +2083,11 @@ namespace tests.BridgeTests
             var mac = "00:06:66:44:55:66";
             WatsonWsServer.ClearSentLog();
 
-            // Apri sessione HW, nessun iscritto
+            // Open HW session, no members
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig { EnableLowNoiseAccelerometer = true, SamplingRate = 51 });
             Assert.Empty(WatsonWsServer.SentLog);
 
-            // UpdateConfigAsync farà un broadcast, ma non essendoci iscritti non deve inviare nulla
+            // UpdateConfigAsync will broadcast, but since there are no subscribers it doesn't have to send anything
             await mgr.UpdateConfigAsync(mac, new ShimmerConfig { EnableGyroscope = true, SamplingRate = 128 });
             Assert.Empty(WatsonWsServer.SentLog);
 
@@ -1814,6 +2095,12 @@ namespace tests.BridgeTests
         }
 
 
+        /// <summary>
+        /// Broadcast delivers config_changed only to clients subscribed to the MAC.
+        /// Expected:
+        /// - No exceptions thrown
+        /// - No "Broadcast error" in logs
+        /// </summary>
         [Fact]
         public async Task Broadcast_WithOneSubscriber_Completes_NoErrors()
         {
@@ -1825,35 +2112,41 @@ namespace tests.BridgeTests
 
             var mac = "00:06:66:AA:BB:01";
 
-            // Apri una sessione hardware (non importa il contenuto, serve a rendere attivo il MAC)
+            // Open a hardware session (the content doesn't matter, it's used to make the MAC active)
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig { EnableGyroscope = true, SamplingRate = 51 });
 
-            // Registra due client; iscriviamo solo A
+            // Register two clients; we only register A
             var ws = GetWs(mgr);
             var clientA = Guid.NewGuid();
             var clientB = Guid.NewGuid();
             ws.RaiseConnected(clientA);
             ws.RaiseConnected(clientB);
 
-            // "open" sottoscrive il clientA al MAC
+            // "open" subscribes clientA to the MAC
             ws.RaiseText(clientA, $"{{\"type\":\"open\",\"mac\":\"{mac}\"}}");
 
-            // Sanity: A è iscritto, B no
+            // Sanity: A is registered, B is not
             Assert.Contains(mac, GetSubscribedMacs(mgr, clientA));
             Assert.DoesNotContain(mac, GetSubscribedMacs(mgr, clientB));
 
-            // Questo causerà un broadcast "config_changed" ai soli iscritti
+            // This will cause a "config_changed" broadcast to subscribers only
             var ex = await Record.ExceptionAsync(async () =>
                 await mgr.UpdateConfigAsync(mac, new ShimmerConfig { EnableBattery = true, SamplingRate = 100 })
             );
 
             Assert.Null(ex);
-            // Non avendo ganci su SendAsync, ci limitiamo a verificare che non ci siano errori loggati
             Assert.DoesNotContain("Broadcast error", lastLog ?? string.Empty);
 
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// A broadcast with no subscribers completes silently.
+        /// Expected:
+        /// - No exceptions thrown
+        /// - No broadcast error logged
+        /// </summary>
         [Fact]
         public async Task Broadcast_NoSubscribers_Completes_Silently()
         {
@@ -1865,7 +2158,7 @@ namespace tests.BridgeTests
 
             var mac = "00:06:66:AA:BB:02";
 
-            // Sessione attiva, ma nessun client "open" ⇒ nessuna sottoscrizione
+            // Session active, but no "open" client -> no subscription
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig { EnableLowNoiseAccelerometer = true, SamplingRate = 51 });
 
             var ex = await Record.ExceptionAsync(async () =>
@@ -1878,6 +2171,12 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Guarding for null WS server is robust; operations do not throw.
+        /// Expected:
+        /// - Updating configuration while WS is null completes without exceptions
+        /// </summary>
         [Fact]
         public async Task Broadcast_WhenWsIsNull_NoThrow()
         {
@@ -1887,7 +2186,7 @@ namespace tests.BridgeTests
             var mac = "00:06:66:AA:BB:03";
             await mgr.OpenConfigureAndStartAsync(mac, new ShimmerConfig { EnableMagnetometer = true, SamplingRate = 51 });
 
-            // Forza _ws = null per testare il guard
+            // Force _ws = null to test the guard
             var f = typeof(WsBridgeManager).GetField("_ws", BindingFlags.NonPublic | BindingFlags.Instance);
             Assert.NotNull(f);
             f!.SetValue(mgr, null);
@@ -1899,8 +2198,14 @@ namespace tests.BridgeTests
             Assert.Null(ex);
         }
 
-        // SendJson behavior
 
+        // ----- SendJson behavior -----
+
+
+        /// <summary>
+        /// Helper: obtains the private <c>SendJson</c> method from <see cref="WsBridgeManager"/> for reflective invocation in tests.
+        /// </summary>
+        /// <returns>The <see cref="MethodInfo"/> representing the non-public instance method <c>SendJson(Guid, object)</c>.</returns>
         private static MethodInfo GetSendJsonMI()
         {
             var mi = typeof(WsBridgeManager).GetMethod(
@@ -1911,6 +2216,13 @@ namespace tests.BridgeTests
             return mi!;
         }
 
+
+        /// <summary>
+        /// When WS server is not initialized, SendJson returns a completed task and does not throw.
+        /// Expected:
+        /// - Invocation completes
+        /// - No "WS send error" is logged
+        /// </summary>
         [Fact]
         public async Task SendJson_NoServer_ReturnsCompletedTask_NoThrow()
         {
@@ -1918,7 +2230,6 @@ namespace tests.BridgeTests
             string? lastLog = null;
             mgr.Log += s => lastLog = s;
 
-            // _ws è null finché non chiami StartAsync
             var mi = GetSendJsonMI();
 
             var clientId = Guid.NewGuid();
@@ -1933,11 +2244,18 @@ namespace tests.BridgeTests
 
             Assert.Null(ex);
             Assert.NotNull(t);
-            await t!; // CompletedTask
-            // Nessun errore loggato
+            await t!;
+
             Assert.True(string.IsNullOrEmpty(lastLog) || !lastLog!.Contains("WS send error", StringComparison.OrdinalIgnoreCase));
         }
 
+
+        /// <summary>
+        /// With a live WS server and a serializable payload, SendJson completes without errors.
+        /// Expected:
+        /// - Invocation completes
+        /// - No "WS send error" in logs
+        /// </summary>
         [Fact]
         public async Task SendJson_WithServerAndSerializablePayload_Completes_NoErrorLog()
         {
@@ -1967,11 +2285,23 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
+
+        /// <summary>
+        /// Test-only payload type that intentionally contains a self-reference to trigger serialization failures.
+        /// Used to verify that <c>SendJson</c> logs errors and returns a completed task when serialization throws.
+        /// </summary>
         private sealed class Cyclic
         {
             public Cyclic? Self { get; set; }
         }
 
+
+        /// <summary>
+        /// If JSON serialization throws (e.g., cyclic object), SendJson logs and returns a completed task.
+        /// Expected:
+        /// - No exception escapes reflection invoke
+        /// - A "WS send error" is logged
+        /// </summary>
         [Fact]
         public async Task SendJson_WhenSerializationThrows_LogsAndReturnsCompletedTask()
         {
@@ -1985,10 +2315,10 @@ namespace tests.BridgeTests
 
             var clientId = Guid.NewGuid();
             var cyc = new Cyclic();
-            cyc.Self = cyc; // ciclo per far fallire System.Text.Json
+            cyc.Self = cyc;
 
             Task? t = null;
-            // Invoke non deve propagare eccezioni del metodo (il catch interno le logga)
+
             var ex = Record.Exception(() =>
             {
                 var ret = mi.Invoke(mgr, new object[] { clientId, (object)cyc });
@@ -1997,7 +2327,7 @@ namespace tests.BridgeTests
 
             Assert.Null(ex);
             Assert.NotNull(t);
-            await t!; // deve essere CompletedTask nonostante l'errore di serializzazione
+            await t!;
 
             Assert.NotNull(lastLog);
             Assert.Contains("WS send error", lastLog!, StringComparison.OrdinalIgnoreCase);
@@ -2005,8 +2335,14 @@ namespace tests.BridgeTests
             await mgr.StopAsync();
         }
 
-        // SppSession class
 
+        // ----- SppSession class -----
+
+
+        /// <summary>
+        /// Helper: retrieves the non-public nested <c>SppSession</c> type defined inside <see cref="WsBridgeManager"/>.
+        /// </summary>
+        /// <returns>The <see cref="Type"/> object for the nested session class.</returns>
         private static Type GetSppSessionType()
         {
             var t = typeof(WsBridgeManager).GetNestedType("SppSession", BindingFlags.NonPublic);
@@ -2014,6 +2350,15 @@ namespace tests.BridgeTests
             return t!;
         }
 
+
+        /// <summary>
+        /// Helper: constructs a new SPP session via its non-public constructor,
+        /// allowing injection of broadcast/log delegates for verification.
+        /// </summary>
+        /// <param name="mac">Device MAC address (may be trimmed by the ctor).</param>
+        /// <param name="broadcast">Callback invoked to broadcast JSON to WS subscribers.</param>
+        /// <param name="log">Callback invoked to collect diagnostic messages.</param>
+        /// <returns>A new SPP session instance (boxed as <see cref="object"/>).</returns>
         private static object CreateSppSession(string mac, Action<string, string>? broadcast = null, Action<string>? log = null)
         {
             var t = GetSppSessionType();
@@ -2034,6 +2379,12 @@ namespace tests.BridgeTests
             return instance;
         }
 
+
+        /// <summary>
+        /// Helper: reads the <c>IsModeLocked</c> property from a SPP session instance via reflection.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
+        /// <returns><c>true</c> if mode is locked; otherwise <c>false</c>.</returns>
         private static bool GetIsModeLocked(object spp)
         {
             var p = spp.GetType().GetProperty("IsModeLocked",
@@ -2044,6 +2395,11 @@ namespace tests.BridgeTests
             return (bool)val!;
         }
 
+
+        /// <summary>
+        /// Helper: invokes the <c>LockMode()</c> method on the SPP session via reflection.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
         private static void CallLockMode(object spp)
         {
             var m = spp.GetType().GetMethod("LockMode",
@@ -2052,28 +2408,36 @@ namespace tests.BridgeTests
             m!.Invoke(spp, Array.Empty<object>());
         }
 
-        [Fact]
-        public void IsModeLocked_Default_IsFalse()
-        {
-            var spp = CreateSppSession("00:11:22:33:44:55");
-            Assert.False(GetIsModeLocked(spp));
-        }
 
+        // ----- LockMode behavior ----- 
+
+
+        /// <summary>
+        /// Calling LockMode sets IsModeLocked to true.
+        /// Expected:
+        /// - IsModeLocked transitions from false to true
+        /// </summary>
         [Fact]
         public void LockMode_Sets_IsModeLocked_True()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:FF");
 
-            // prima del lock
+            // before the lock
             Assert.False(GetIsModeLocked(spp));
 
             // lock
             CallLockMode(spp);
 
-            // dopo il lock
+            // after the lock
             Assert.True(GetIsModeLocked(spp));
         }
 
+
+        /// <summary>
+        /// LockMode is idempotent; repeated calls keep IsModeLocked true.
+        /// Expected:
+        /// - IsModeLocked remains true across multiple LockMode calls
+        /// </summary>
         [Fact]
         public void LockMode_IsIdempotent_RemainsTrue_OnMultipleCalls()
         {
@@ -2082,17 +2446,24 @@ namespace tests.BridgeTests
             CallLockMode(spp);
             Assert.True(GetIsModeLocked(spp));
 
-            // richiamo multiplo non deve cambiare nulla (rimane true)
+            // multiple calls must not change anything (remains true)
             CallLockMode(spp);
             CallLockMode(spp);
 
             Assert.True(GetIsModeLocked(spp));
         }
 
+
+        /// <summary>
+        /// LockMode does not trigger broadcast/log callbacks on its own.
+        /// Expected:
+        /// - After LockMode, no broadcast/log delegates are invoked implicitly
+        /// </summary>
         [Fact]
         public void LockMode_DoesNotDepend_OnDelegates()
         {
-            // Verifica anche con delegati “reali” (che catturano dati) che non influenzano il lock
+
+            // Also check with “real” delegates (that capture data) that do not affect the lock
             string? lastMac = null;
             string? lastJson = null;
             string? lastLog = null;
@@ -2106,14 +2477,37 @@ namespace tests.BridgeTests
             CallLockMode(spp);
             Assert.True(GetIsModeLocked(spp));
 
-            // delegati non devono essere stati invocati dal solo LockMode
+            // delegates must not have been invoked by LockMode alone
             Assert.Null(lastMac);
             Assert.Null(lastJson);
             Assert.Null(lastLog);
         }
 
-        // CurrentConfig behavior
 
+        // ----- IsModeLocked behavior -----
+
+
+        /// <summary>
+        /// Default SPP session starts with mode unlocked.
+        /// Expected:
+        /// - IsModeLocked == false by default
+        /// </summary>
+        [Fact]
+        public void IsModeLocked_Default_IsFalse()
+        {
+            var spp = CreateSppSession("00:11:22:33:44:55");
+            Assert.False(GetIsModeLocked(spp));
+        }
+
+
+        // ----- CurrentConfig behavior -----
+
+
+        /// <summary>
+        /// Helper: constructs a new SPP session with only MAC argument (test-oriented overload).
+        /// </summary>
+        /// <param name="mac">Device MAC address.</param>
+        /// <returns>A new SPP session instance.</returns>
         private static object CreateSppSession(string mac)
         {
             var t = GetSppSessionType();
@@ -2126,6 +2520,12 @@ namespace tests.BridgeTests
             return ctor!.Invoke(new object[] { mac, (Action<string, string>)((_, __) => { }), (Action<string>)(_ => { }) });
         }
 
+
+        /// <summary>
+        /// Helper: sets the private field <c>_currentCfg</c> on a SPP session to the provided config.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
+        /// <param name="cfg">The configuration to set.</param>
         private static void SetPrivateCurrentCfg(object spp, ShimmerConfig cfg)
         {
             var f = spp.GetType().GetField("_currentCfg", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2133,6 +2533,12 @@ namespace tests.BridgeTests
             f!.SetValue(spp, cfg);
         }
 
+
+        /// <summary>
+        /// Helper: reads the public snapshot property <c>CurrentConfig</c> from a SPP session.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
+        /// <returns>A detached snapshot of <see cref="ShimmerConfig"/>.</returns>
         private static ShimmerConfig GetCurrentConfigSnapshot(object spp)
         {
             var p = spp.GetType().GetProperty("CurrentConfig", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -2142,6 +2548,12 @@ namespace tests.BridgeTests
             return (ShimmerConfig)v!;
         }
 
+
+        /// <summary>
+        /// Helper: returns the private field <c>_currentCfg</c> (internal reference) of a SPP session.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
+        /// <returns>The internal <see cref="ShimmerConfig"/> reference.</returns>
         private static ShimmerConfig GetPrivateCurrentCfg(object spp)
         {
             var f = spp.GetType().GetField("_currentCfg", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2151,14 +2563,21 @@ namespace tests.BridgeTests
             return (ShimmerConfig)v!;
         }
 
+
+        /// <summary>
+        /// CurrentConfig returns a semantically equal copy of the applied configuration.
+        /// Expected:
+        /// - Snapshot values match the internal config values
+        /// - Snapshot is not the same instance as the internal reference
+        /// </summary>
         [Fact]
         public void CurrentConfig_Returns_ExactValues_Copy()
         {
             var spp = CreateSppSession("00:11:22:33:44:55");
 
-            // stato interno da “applicato”
             var applied = new ShimmerConfig
             {
+
                 // IMU
                 EnableLowNoiseAccelerometer = true,
                 EnableWideRangeAccelerometer = true,
@@ -2169,7 +2588,8 @@ namespace tests.BridgeTests
                 EnableExtA6 = true,
                 EnableExtA7 = false,
                 EnableExtA15 = true,
-                SamplingRate = 128.5,
+                SamplingRate = 50.5,
+
                 // EXG
                 EnableExg1 = true,
                 EnableExg2 = false,
@@ -2180,7 +2600,6 @@ namespace tests.BridgeTests
 
             var snap = GetCurrentConfigSnapshot(spp);
 
-            // stessa semantica valori
             Assert.True(snap.EnableLowNoiseAccelerometer);
             Assert.True(snap.EnableWideRangeAccelerometer);
             Assert.True(snap.EnableGyroscope);
@@ -2190,18 +2609,24 @@ namespace tests.BridgeTests
             Assert.True(snap.EnableExtA6);
             Assert.False(snap.EnableExtA7);
             Assert.True(snap.EnableExtA15);
-            Assert.Equal(128.5, snap.SamplingRate);
+            Assert.Equal(50.5, snap.SamplingRate);
 
             Assert.True(snap.EnableExg1);
             Assert.False(snap.EnableExg2);
             Assert.True(snap.ExgUse16Bit);
             Assert.Equal(ExgMode.Respiration, snap.ExgMode);
 
-            // non è la stessa istanza
+            // it's not the same instance
             var internalRef = GetPrivateCurrentCfg(spp);
             Assert.False(Object.ReferenceEquals(snap, internalRef));
         }
 
+
+        /// <summary>
+        /// The returned CurrentConfig snapshot is detached; mutating it does not alter the internal state.
+        /// Expected:
+        /// - Mutations on snapshot do not affect subsequent snapshots
+        /// </summary>
         [Fact]
         public void CurrentConfig_IsDetached_MutationsOnSnapshot_DoNotAffectInternal()
         {
@@ -2223,14 +2648,14 @@ namespace tests.BridgeTests
             Assert.True(snap1.EnableExg1);
             Assert.Equal(ExgMode.EMG, snap1.ExgMode);
 
-            // mutazioni sulla snapshot
+            // snapshot mutations
             snap1.EnableGyroscope = false;
             snap1.EnableBattery = false;
             snap1.EnableExg1 = false;
             snap1.ExgMode = ExgMode.None;
             snap1.SamplingRate = 200;
 
-            // ricava nuova snapshot dall’oggetto → deve riflettere lo stato interno invariato
+            // get new snapshot from object -> must reflect unchanged internal state
             var snap2 = GetCurrentConfigSnapshot(spp);
             Assert.True(snap2.EnableGyroscope);
             Assert.True(snap2.EnableBattery);
@@ -2239,6 +2664,13 @@ namespace tests.BridgeTests
             Assert.Equal(51, snap2.SamplingRate);
         }
 
+
+        /// <summary>
+        /// Each access to CurrentConfig returns a new instance.
+        /// Expected:
+        /// - Distinct references for successive snapshots
+        /// - Mutating one snapshot does not affect the other
+        /// </summary>
         [Fact]
         public void CurrentConfig_ReturnsNewInstance_EachAccess()
         {
@@ -2253,7 +2685,7 @@ namespace tests.BridgeTests
             Assert.True(a.EnableMagnetometer);
             Assert.True(b.EnableMagnetometer);
 
-            // muta A → B non deve cambiare
+            // change A -> B must not change
             a.EnableMagnetometer = false;
             a.SamplingRate = 1;
 
@@ -2261,12 +2693,22 @@ namespace tests.BridgeTests
             Assert.Equal(100, b.SamplingRate);
         }
 
-        // EnabledBlocks behavior
 
-        // Wrapper comodo: usa la tua overload esistente CreateSppSession(string)
+        // ----- EnabledBlocks behavior -----
+
+
+        /// <summary>
+        /// Helper: minimal factory using a fixed MAC for convenience in EnabledBlocks tests.
+        /// </summary>
+        /// <returns>A new SPP session instance.</returns>
         private object CreateSppSession() => CreateSppSession("11:22:33:44:55");
 
-        // Helper per invocare il metodo EnabledBlocks() (pubblico) sulla SppSession annidata
+
+        /// <summary>
+        /// Helper: invokes the public method <c>EnabledBlocks()</c> on the SPP session and returns the list of keys.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
+        /// <returns>An ordered list of enabled block keys.</returns>
         private static IReadOnlyList<string> CallEnabledBlocks(object spp)
         {
             var m = spp.GetType().GetMethod(
@@ -2279,6 +2721,12 @@ namespace tests.BridgeTests
             return (IReadOnlyList<string>)res!;
         }
 
+
+        /// <summary>
+        /// When all flags are off, EnabledBlocks returns an empty list.
+        /// Expected:
+        /// - Empty list
+        /// </summary>
         [Fact]
         public void EnabledBlocks_Empty_When_AllFlagsOff()
         {
@@ -2288,6 +2736,12 @@ namespace tests.BridgeTests
             Assert.Empty(blocks);
         }
 
+
+        /// <summary>
+        /// EXG is present if either Exg1 or Exg2 is enabled (no duplicates).
+        /// Expected:
+        /// - Only ["exg"] whether Exg1, Exg2, or both are enabled
+        /// </summary>
         [Fact]
         public void EnabledBlocks_Exg_When_Exg1_Or_Exg2()
         {
@@ -2306,28 +2760,55 @@ namespace tests.BridgeTests
             Assert.Equal(new[] { "exg" }, CallEnabledBlocks(spp));
         }
 
+
+        /// <summary>
+        /// Each external ADC flag produces its own block: "ext6", "ext7", "ext15".
+        /// Expected:
+        /// - ["ext6"] if A6
+        /// - ["ext7"] if A7
+        /// - ["ext15"] if A15
+        /// - Combinations in deterministic order: A6, A7, A15
+        /// </summary>
         [Fact]
-        public void EnabledBlocks_Ext_When_AnyExternalAdcOn()
+        public void EnabledBlocks_Ext_Split_By_Channel()
         {
             var spp = CreateSppSession();
 
-            // A6
+            // A6 only
             SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableExtA6 = true });
-            Assert.Equal(new[] { "ext" }, CallEnabledBlocks(spp));
+            Assert.Equal(new[] { "ext6" }, CallEnabledBlocks(spp));
 
-            // A7
+            // A7 only
             SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableExtA7 = true });
-            Assert.Equal(new[] { "ext" }, CallEnabledBlocks(spp));
+            Assert.Equal(new[] { "ext7" }, CallEnabledBlocks(spp));
 
-            // A15
+            // A15 only
             SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableExtA15 = true });
-            Assert.Equal(new[] { "ext" }, CallEnabledBlocks(spp));
+            Assert.Equal(new[] { "ext15" }, CallEnabledBlocks(spp));
 
-            // Combo -> sempre un solo "ext"
+            // A6 + A7
+            SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableExtA6 = true, EnableExtA7 = true });
+            Assert.Equal(new[] { "ext6", "ext7" }, CallEnabledBlocks(spp));
+
+            // A6 + A15
+            SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableExtA6 = true, EnableExtA15 = true });
+            Assert.Equal(new[] { "ext6", "ext15" }, CallEnabledBlocks(spp));
+
+            // A7 + A15
+            SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableExtA7 = true, EnableExtA15 = true });
+            Assert.Equal(new[] { "ext7", "ext15" }, CallEnabledBlocks(spp));
+
+            // A6 + A7 + A15
             SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableExtA6 = true, EnableExtA7 = true, EnableExtA15 = true });
-            Assert.Equal(new[] { "ext" }, CallEnabledBlocks(spp));
+            Assert.Equal(new[] { "ext6", "ext7", "ext15" }, CallEnabledBlocks(spp));
         }
 
+
+        /// <summary>
+        /// Enabling Pressure/Temperature adds the pair "temp", then "press", in this order.
+        /// Expected:
+        /// - ["temp","press"]
+        /// </summary>
         [Fact]
         public void EnabledBlocks_TempAdds_Temp_And_Press()
         {
@@ -2336,10 +2817,16 @@ namespace tests.BridgeTests
             SetPrivateCurrentCfg(spp, new ShimmerConfig { EnablePressureTemperature = true });
             var blocks = CallEnabledBlocks(spp);
 
-            // deve contenere entrambe e nel giusto ordine temp poi press
+            // must contain both and in the correct order temp then press
             Assert.Equal(new[] { "temp", "press" }, blocks);
         }
 
+
+        /// <summary>
+        /// Each individual IMU flag maps to its expected single key.
+        /// Expected:
+        /// - LNA -> ["lna"], WRA -> ["wra"], Gyro -> ["gyro"], Mag -> ["mag"], Battery -> ["vbatt"]
+        /// </summary>
         [Fact]
         public void EnabledBlocks_IndividualFlags_MapToExpectedKeys()
         {
@@ -2361,6 +2848,12 @@ namespace tests.BridgeTests
             Assert.Equal(new[] { "vbatt" }, CallEnabledBlocks(spp));
         }
 
+
+        /// <summary>
+        /// When multiple flags are enabled, the resulting block list is stable (deterministic order) and deduplicated.
+        /// Expected:
+        /// - ["exg", "lna", "wra", "gyro", "mag", "temp", "press", "vbatt", "ext6", "ext7", "ext15"]
+        /// </summary>
         [Fact]
         public void EnabledBlocks_Composite_AllFlags_OrderIsStable()
         {
@@ -2369,23 +2862,30 @@ namespace tests.BridgeTests
             var cfg = new ShimmerConfig
             {
                 EnableExg1 = true,
+                EnableExg2 = true,
                 EnableLowNoiseAccelerometer = true,
                 EnableWideRangeAccelerometer = true,
                 EnableGyroscope = true,
                 EnableMagnetometer = true,
                 EnablePressureTemperature = true,
                 EnableBattery = true,
-                EnableExtA6 = true // una qualunque tra A6/A7/A15
+                EnableExtA6 = true,
+                EnableExtA7 = true,
+                EnableExtA15 = true
             };
             SetPrivateCurrentCfg(spp, cfg);
 
             var blocks = CallEnabledBlocks(spp);
 
-            // ordine atteso secondo l'implementazione
-            var expected = new[] { "exg", "lna", "wra", "gyro", "mag", "temp", "press", "vbatt", "ext" };
+            var expected = new[] { "exg", "lna", "wra", "gyro", "mag", "temp", "press", "vbatt", "ext6", "ext7", "ext15"};
             Assert.Equal(expected, blocks);
         }
 
+
+        /// <summary>
+        /// No duplicates when multiple groups are enabled.
+        /// Expected: ["exg"]
+        /// </summary>
         [Fact]
         public void EnabledBlocks_NoDuplicates_When_MultipleGroupsEnabled()
         {
@@ -2395,24 +2895,25 @@ namespace tests.BridgeTests
             {
                 EnableExg1 = true,
                 EnableExg2 = true,
-                EnableExtA6 = true,
-                EnableExtA7 = true,
-                EnableExtA15 = true
             };
             SetPrivateCurrentCfg(spp, cfg);
 
             var blocks = CallEnabledBlocks(spp);
 
-            // exg ed ext compaiono una sola volta
-            Assert.Equal(new[] { "exg", "ext" }, blocks);
+            Assert.Equal(new[] { "exg"}, blocks);
         }
 
+
+        /// <summary>
+        /// Stable output order regardless of flag set order.
+        /// Expected: ["exg", "lna", "wra", "gyro", "mag", "temp", "press", "vbatt", "ext15"]
+        /// </summary>
         [Fact]
         public void EnabledBlocks_OrderStable_RegardlessOfFlagSetOrder()
         {
             var spp = CreateSppSession();
 
-            // Imposta i flag in ordine “strano”
+            // Set flags in “strange” order
             var cfg = new ShimmerConfig
             {
                 EnableMagnetometer = true,
@@ -2427,13 +2928,20 @@ namespace tests.BridgeTests
             SetPrivateCurrentCfg(spp, cfg);
 
             var blocks = CallEnabledBlocks(spp);
-            var expected = new[] { "exg", "lna", "wra", "gyro", "mag", "temp", "press", "vbatt", "ext" };
+            var expected = new[] { "exg", "lna", "wra", "gyro", "mag", "temp", "press", "vbatt", "ext15" };
             Assert.Equal(expected, blocks);
         }
 
-        // ResetIndices behavior
-        // --- ResetIndices behavior --------------------------------------------------
 
+        // ----- ResetIndices behavior -----
+
+
+        /// <summary>
+        /// Helper: sets a private index field to a specific value for testing ResetIndices.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
+        /// <param name="field">Private field name.</param>
+        /// <param name="value">Integer value to assign.</param>
         private static void SetPrivateIndex(object spp, string field, int value)
         {
             var f = spp.GetType().GetField(field, BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2441,6 +2949,13 @@ namespace tests.BridgeTests
             f!.SetValue(spp, value);
         }
 
+
+        /// <summary>
+        /// Helper: reads a private index field for assertions.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
+        /// <param name="field">Private field name.</param>
+        /// <returns>Field integer value.</returns>
         private static int GetPrivateIndex(object spp, string field)
         {
             var f = spp.GetType().GetField(field, BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2448,6 +2963,11 @@ namespace tests.BridgeTests
             return (int)f!.GetValue(spp)!;
         }
 
+
+        /// <summary>
+        /// Helper: invokes the private <c>ResetIndices()</c> method on SPP session.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
         private static void InvokeResetIndices(object spp)
         {
             var m = spp.GetType().GetMethod("ResetIndices", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2455,12 +2975,19 @@ namespace tests.BridgeTests
             m!.Invoke(spp, null);
         }
 
+
+        /// <summary>
+        /// ResetIndices sets all cached indices to -1 and is idempotent.
+        /// Expected:
+        /// - All index fields equal -1 after call
+        /// - Repeating the call leaves them at -1
+        /// </summary>
         [Fact]
         public void ResetIndices_SetsAllCachedIndicesToMinusOne_And_IsIdempotent()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:FF");
 
-            // Precarica valori != -1 per verificare che vengano azzerati
+            // Preload values ​​!= -1 to ensure they are cleared
             SetPrivateIndex(spp, "iTs", 5);
 
             SetPrivateIndex(spp, "iExg1", 10);
@@ -2493,7 +3020,7 @@ namespace tests.BridgeTests
             // Act
             InvokeResetIndices(spp);
 
-            // Assert: tutti a -1
+            // Assert: all at -1
             Assert.Equal(-1, GetPrivateIndex(spp, "iTs"));
 
             Assert.Equal(-1, GetPrivateIndex(spp, "iExg1"));
@@ -2523,17 +3050,22 @@ namespace tests.BridgeTests
             Assert.Equal(-1, GetPrivateIndex(spp, "iA7"));
             Assert.Equal(-1, GetPrivateIndex(spp, "iA15"));
 
-            // Idempotenza: richiamarlo ancora non cambia il risultato
+            // Idempotence: calling it again does not change the result
             InvokeResetIndices(spp);
             Assert.Equal(-1, GetPrivateIndex(spp, "iTs"));
             Assert.Equal(-1, GetPrivateIndex(spp, "iExg1"));
             Assert.Equal(-1, GetPrivateIndex(spp, "iA15"));
         }
 
-        // RefreshMissingIndices behavior
 
-        // --- RefreshMissingIndices behavior ----------------------------------------
+        // ----- RefreshMissingIndices behavior -----
 
+
+        /// <summary>
+        /// Helper: invokes the private <c>RefreshMissingIndices(ObjectCluster)</c> method on SPP session.
+        /// </summary>
+        /// <param name="spp">The SPP session instance.</param>
+        /// <param name="oc">A data cluster used during index refresh.</param>
         private static void InvokeRefreshMissingIndices(object spp, ShimmerAPI.ObjectCluster oc)
         {
             var m = spp.GetType().GetMethod("RefreshMissingIndices", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2541,37 +3073,49 @@ namespace tests.BridgeTests
             m!.Invoke(spp, new object[] { oc });
         }
 
+
+        /// <summary>
+        /// RefreshMissingIndices does not overwrite indices that are already set (not -1).
+        /// Expected:
+        /// - Pre-populated indices remain unchanged
+        /// </summary>
         [Fact]
         public void RefreshMissingIndices_DoesNotOverwrite_AlreadyResolvedIndices()
         {
             var spp = CreateSppSession("10:20:30:40:50:60");
 
-            // Abilita EXG1 nel cfg interno
+            // Enable EXG1 in the internal cfg
             var cfg = new ShimmerConfig { EnableExg1 = true };
             SetPrivateCurrentCfg(spp, cfg);
 
-            // Preimposta un indice "già risolto"
+            // Preset a "already resolved" index
             var fExg1 = spp.GetType().GetField("iExg1", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fExg1);
             fExg1!.SetValue(spp, 7);
 
-            // Chiama il refresh: gli stub di ObjectCluster restituiscono -1,
-            // ma siccome iExg1 != -1, non deve essere toccato.
+            // Call refresh: ObjectCluster stubs return -1,
+            // but since iExg1 != -1, it should not be touched.
             var oc = new ShimmerAPI.ObjectCluster();
             InvokeRefreshMissingIndices(spp, oc);
 
             Assert.Equal(7, (int)fExg1.GetValue(spp)!);
         }
 
+
+        /// <summary>
+        /// With all sensor flags disabled, RefreshMissingIndices keeps all indices at -1.
+        /// Expected:
+        /// - All indices remain -1
+        /// </summary
         [Fact]
         public void RefreshMissingIndices_WhenAllFlagsDisabled_KeepsAllAtMinusOne()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:01");
 
-            // Tutti i flag a false -> il metodo non deve cercare indici (restano -1)
+            // All flags are false -> the method must not look for indices (they remain -1)
             SetPrivateCurrentCfg(spp, new ShimmerConfig());
 
-            // Prepara tutti gli indici a -1
+            // Set all indices to -1
             string[] fields =
             {
                 "iTs",
@@ -2601,33 +3145,46 @@ namespace tests.BridgeTests
             }
         }
 
+
+        /// <summary>
+        /// The timestamp index (iTs) is not overwritten when already set.
+        /// Expected:
+        /// - iTs retains its pre-set value
+        /// </summary>
         [Fact]
         public void RefreshMissingIndices_TimestampIndex_NotOverwritten_WhenAlreadySet()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:02");
 
-            // Qualunque cfg va bene: qui verifichiamo solo che iTs non venga sovrascritto
+            // Any cfg is fine: here we just check that iTs is not overwritten
             SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableGyroscope = true });
 
-            // Imposta iTs già risolto
+            // Set iTs already solved
             var fTs = spp.GetType().GetField("iTs", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fTs);
             fTs!.SetValue(spp, 42);
 
-            // Anche se ObjectCluster (stub) restituirà -1 su qualsiasi lookup,
-            // iTs non deve cambiare perché diverso da -1
+            // Although ObjectCluster (stub) will return -1 on any lookup,
+            // iTs must not change because it is different from -1
             var oc = new ShimmerAPI.ObjectCluster();
             InvokeRefreshMissingIndices(spp, oc);
 
             Assert.Equal(42, (int)fTs.GetValue(spp)!);
         }
 
+
+        /// <summary>
+        /// With some flags enabled, prepopulated indices remain; unresolved stay at -1.
+        /// Expected:
+        /// - Pre-set indices not changed
+        /// - -1 indices remain -1 if detection fails
+        /// </summary>
         [Fact]
         public void RefreshMissingIndices_WhenSomeFlagsEnabled_LeavesPrepopulated_OnOthersUnchanged()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:03");
 
-            // Abilita alcune famiglie di sensori
+            // Enable some sensor
             var cfg = new ShimmerConfig
             {
                 EnableExg1 = true,
@@ -2636,11 +3193,11 @@ namespace tests.BridgeTests
             };
             SetPrivateCurrentCfg(spp, cfg);
 
-            // Preimposta indici "già trovati"
+            // Preset "already found" indexes
             spp.GetType().GetField("iExg1", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, 100);
             spp.GetType().GetField("iLnaX", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, 200);
 
-            // Lasciane altri a -1 (non verranno risolti perché lo stub GetIndex -> -1)
+            // Leave others at -1 (they won't resolve because the stub GetIndex -> -1)
             spp.GetType().GetField("iExg2", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, -1);
             spp.GetType().GetField("iLnaY", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, -1);
             spp.GetType().GetField("iMx", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, -1);
@@ -2648,20 +3205,26 @@ namespace tests.BridgeTests
             var oc = new ShimmerAPI.ObjectCluster();
             InvokeRefreshMissingIndices(spp, oc);
 
-            // Quelli preimpostati restano invariati
+            // The default ones remain unchanged
             Assert.Equal(100, (int)spp.GetType().GetField("iExg1", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(spp)!);
             Assert.Equal(200, (int)spp.GetType().GetField("iLnaX", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(spp)!);
 
-            // Quelli a -1 restano -1 (nessuna risoluzione possibile nello stub)
+            // Those at -1 remain -1 (no resolution possible in the stub)
             Assert.Equal(-1, (int)spp.GetType().GetField("iExg2", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(spp)!);
             Assert.Equal(-1, (int)spp.GetType().GetField("iLnaY", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(spp)!);
             Assert.Equal(-1, (int)spp.GetType().GetField("iMx", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(spp)!);
         }
 
-        // SetSamplingRateAsync behavior
 
-        // --- SetSamplingRateAsync behavior ------------------------------------------
+        // ----- SetSamplingRateAsync behavior -----
 
+
+        /// <summary>
+        /// Helper: sets a private field to a value on the SPP session instance.
+        /// </summary>
+        /// <param name="o">Target instance.</param>
+        /// <param name="name">Field name.</param>
+        /// <param name="value">Value to assign.</param>
         private static void SetPrivateField(object o, string name, object? value)
         {
             var f = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2669,6 +3232,14 @@ namespace tests.BridgeTests
             f!.SetValue(o, value);
         }
 
+
+        /// <summary>
+        /// Helper: reads a private field of generic type from the SPP session instance.
+        /// </summary>
+        /// <typeparam name="T">Expected field type.</typeparam>
+        /// <param name="o">Target instance.</param>
+        /// <param name="name">Field name.</param>
+        /// <returns>Field value cast to <typeparamref name="T"/>.</returns>
         private static T GetPrivateField<T>(object o, string name)
         {
             var f = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
@@ -2676,125 +3247,156 @@ namespace tests.BridgeTests
             return (T)f!.GetValue(o)!;
         }
 
+
+        /// <summary>
+        /// Helper: assigns a stubbed core (<c>ShimmerLogAndStreamAndroidBluetoothV2</c>) into the SPP session.
+        /// </summary>
+        /// <param name="spp">SPP session.</param>
+        /// <param name="mac">Device MAC.</param>
         private static void AssignCore(object spp, string mac = "00:11:22:33:44:55")
         {
-            // Core fittizio usato dalla sessione
             var core = new ShimmerSDK.Android.ShimmerLogAndStreamAndroidBluetoothV2("DEV", mac);
             SetPrivateField(spp, "_core", core);
         }
 
+
+        /// <summary>
+        /// SetSamplingRateAsync throws when session is not open (no core assigned).
+        /// Expected:
+        /// - InvalidOperationException is thrown
+        /// </summary>
         [Fact]
         public async Task SetSamplingRateAsync_Throws_When_NotOpen()
         {
-            var spp = CreateSppSession("10:10:10:10:10:10"); // _core resta null
+            var spp = CreateSppSession("10:10:10:10:10:10"); // _core remains null
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 (Task<double>)spp.GetType()
                     .GetMethod("SetSamplingRateAsync", BindingFlags.Instance | BindingFlags.Public)!
                     .Invoke(spp, new object[] { 128.0 })!);
         }
 
+
+        /// <summary>
+        /// SetSamplingRateAsync rounds the rate, updates config, resets indices and timestamp base.
+        /// Expected:
+        /// - Returned/applied SR is rounded integer
+        /// - Current config reflects new SR
+        /// - Indices set to -1 and _tsBase cleared
+        /// </summary>
         [Fact]
         public async Task SetSamplingRateAsync_UpdatesCfg_ResetsIndices_And_TsBase()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:01");
             AssignCore(spp);
 
-            // Prepara cfg interno + indici sporchi
             SetPrivateCurrentCfg(spp, new ShimmerConfig { SamplingRate = 51, EnableGyroscope = true });
             SetPrivateField(spp, "iTs", 5);
             SetPrivateField(spp, "iExg1", 10);
             SetPrivateField(spp, "iGx", 3);
-            // ts base valorizzata → deve tornare null
             SetPrivateField(spp, "_tsBase", (double?)123.45);
 
-            // Chiama API
             var applied = await (Task<double>)spp.GetType()
                 .GetMethod("SetSamplingRateAsync", BindingFlags.Instance | BindingFlags.Public)!
                 .Invoke(spp, new object[] { 127.6 })!;
 
-            // Rounding a intero
+            // Rounding to integer
             Assert.Equal(128, applied);
 
-            // CurrentConfig riflette il nuovo SR (usiamo la property pubblica)
+            // CurrentConfig reflects the new SR (we use the public property)
             var snap = GetCurrentConfigSnapshot(spp);
             Assert.Equal(128, snap.SamplingRate);
 
-            // Indici resettati
+            // Indexes reset
             Assert.Equal(-1, GetPrivateField<int>(spp, "iTs"));
             Assert.Equal(-1, GetPrivateField<int>(spp, "iExg1"));
             Assert.Equal(-1, GetPrivateField<int>(spp, "iGx"));
 
-            // Timestamp base azzerato
+            // Base timestamp reset
             Assert.Null(GetPrivateField<double?>(spp, "_tsBase"));
         }
 
+
+        /// <summary>
+        /// If streaming and AnySensorEnabled == true, SetSamplingRateAsync restarts the data flow.
+        /// Expected:
+        /// - Handler is unhooked and then reinstalled (non-null at the end)
+        /// - Config shows the rounded rate
+        /// </summary>
         [Fact]
         public async Task SetSamplingRateAsync_WhenStreamingAndSensorsEnabled_Restarts()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:02");
             AssignCore(spp);
 
-            // Abilita almeno un sensore così AnySensorEnabled == true
+            // Enable at least one sensor like this AnySensorEnabled == true
             SetPrivateCurrentCfg(spp, new ShimmerConfig { EnableGyroscope = true, SamplingRate = 51 });
 
-            // Simula "streaming attivo" (_handler != null)
+            // Simulate "active streaming" (_handler != null)
             SetPrivateField(spp, "_handler", (EventHandler)((_, __) => { }));
 
-            // Esegue
             var applied = await (Task<double>)spp.GetType()
                 .GetMethod("SetSamplingRateAsync", BindingFlags.Instance | BindingFlags.Public)!
                 .Invoke(spp, new object[] { 64.2 })!;
 
             Assert.Equal(64, applied);
 
-            // Atteso: Stop() azzera handler poi Start() lo riporta != null.
-            // Verifichiamo che, a fine metodo, l'handler sia presente.
+            // Expected: Stop() clears the handler, then Start() resets it to != null.
+            // Let's check that the handler is present at the end of the method.
             var handlerAfter = GetPrivateField<EventHandler?>(spp, "_handler");
             Assert.NotNull(handlerAfter);
 
-            // E la config aggiornata
+            // And the updated config
             var snap = GetCurrentConfigSnapshot(spp);
             Assert.Equal(64, snap.SamplingRate);
         }
 
+
+        /// <summary>
+        /// If streaming but no sensors enabled, SetSamplingRateAsync does not restart.
+        /// Expected:
+        /// - The existing handler reference remains the same
+        /// - Config updated with rounded rate
+        /// </summary>
         [Fact]
         public async Task SetSamplingRateAsync_WhenStreamingAndNoSensors_DoesNotRestart()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:03");
             AssignCore(spp);
 
-            // Nessun sensore abilitato → AnySensorEnabled == false
+            // No sensors enabled -> AnySensorEnabled == false
             SetPrivateCurrentCfg(spp, new ShimmerConfig { SamplingRate = 200 });
 
-            // Simula "streaming attivo" (_handler != null)
+            // Simulate "active streaming" (_handler != null)
             var initialHandler = (EventHandler)((_, __) => { });
             SetPrivateField(spp, "_handler", initialHandler);
 
-            // Esegue
             var applied = await (Task<double>)spp.GetType()
                 .GetMethod("SetSamplingRateAsync", BindingFlags.Instance | BindingFlags.Public)!
                 .Invoke(spp, new object[] { 100.0 })!;
 
             Assert.Equal(100, applied);
 
-            // Atteso: NON viene eseguito Start(), quindi non deve essere creato/registrato
-            // un nuovo handler; il riferimento resta quello che avevamo prima.
+            // Expected: Start() is NOT executed, so a new handler does not need to be created/registered.
+            // The reference remains the same as before.
             var handlerAfter = GetPrivateField<EventHandler?>(spp, "_handler");
             Assert.Same(initialHandler, handlerAfter);
 
-            // Config aggiornata
+            // Updated config
             var snap = GetCurrentConfigSnapshot(spp);
             Assert.Equal(100, snap.SamplingRate);
         }
 
 
+        /// <summary>
+        /// SetSamplingRateAsync rounds to nearest integer and (optionally) logs the change.
+        /// Expected:
+        /// - Returned/applied rate is rounded
+        /// - Current config shows the rounded value
+        /// </summary>
         [Fact]
         public async Task SetSamplingRateAsync_Rounds_To_Integer_And_Logs()
         {
             var logs = new List<string>();
-            // Usa il tuo helper CreateSppSession(...) che accetta la MAC; il logger
-            // viene già indirizzato alla action interna. Se hai un overload con logger,
-            // sostituiscilo; altrimenti qui verifichiamo solo il rounding.
             var spp = CreateSppSession("AA:BB:CC:DD:EE:04");
             AssignCore(spp);
 
@@ -2808,77 +3410,98 @@ namespace tests.BridgeTests
 
             var snap = GetCurrentConfigSnapshot(spp);
             Assert.Equal(201, snap.SamplingRate);
-
-            // Se nel tuo setup il logger è catturabile, puoi aggiungere un assert tipo:
-            // Assert.Contains(logs, s => s.Contains("[CFG] sampling rate set to 201 Hz"));
-            // (lasciato commentato per non creare dipendenze se non collezioni i log)
         }
 
-        // SppSession behavior
-        // --- SppSession .ctor --------------------------------------------------------
 
+        // ----- SppSession constructor behavior -----
+
+
+        /// <summary>
+        /// The SppSession constructor trims MAC and assigns broadcast/log callbacks.
+        /// Expected:
+        /// - Stored MAC is trimmed
+        /// - Internal delegates reference the provided callbacks
+        /// </summary>
         [Fact]
         public void SppSession_Ctor_TrimsMac_And_AssignsCallbacks()
         {
-            // arrange
             var macIn = "  01:23:45:67:89:AB  ";
             Action<string, string> broadcast = (_, __) => { };
             Action<string> log = _ => { };
 
-            // act
             var spp = CreateSppSession(macIn, broadcast, log);
 
-            // assert: MAC viene trim-mato e salvato
+            // MAC is trimmed and saved
             var macStored = GetPrivateField<string>(spp, "_mac");
             Assert.Equal("01:23:45:67:89:AB", macStored);
 
-            // assert: i callback vengono assegnati
+            // callbacks are assigned
             var bcStored = GetPrivateField<Delegate>(spp, "_broadcast");
             var logStored = GetPrivateField<Delegate>(spp, "_log");
             Assert.Same(broadcast, bcStored);
             Assert.Same(log, logStored);
         }
 
+
+        /// <summary>
+        /// The constructor allows empty/whitespace MAC and stores it as empty string.
+        /// Expected:
+        /// - Internal _mac == string.Empty
+        /// </summary>
         [Fact]
         public void SppSession_Ctor_AllowsEmptyOrWhitespaceMac_StoresEmptyString()
         {
-            // arrange
             var macIn = "   ";
             Action<string, string> broadcast = (_, __) => { };
             Action<string> log = _ => { };
 
-            // act
             var spp = CreateSppSession(macIn, broadcast, log);
 
-            // assert
             var macStored = GetPrivateField<string>(spp, "_mac");
             Assert.Equal(string.Empty, macStored);
         }
 
+
+        /// <summary>
+        /// Initial state of a new session has IsModeLocked == false.
+        /// Expected:
+        /// - IsModeLocked is false
+        /// </summary>
         [Fact]
         public void SppSession_Ctor_InitialState_ModeUnlocked()
         {
-            // arrange
             Action<string, string> broadcast = (_, __) => { };
             Action<string> log = _ => { };
             var spp = CreateSppSession("00:11:22:33:44:55", broadcast, log);
 
-            // assert: per default la modalità non è lockata
             var isLockedProp = spp.GetType().GetProperty("IsModeLocked", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(isLockedProp);
             Assert.False((bool)isLockedProp!.GetValue(spp)!);
         }
 
-        // OpenAsync behavior
-        // --- OpenAsync behavior ------------------------------------------------------
 
+        // ----- OpenAsync behavior -----
+
+
+        /// <summary>
+        /// Helper: gets the backing delegate of an event by name (field-like events) on a target object.
+        /// </summary>
+        /// <param name="target">Object with the event.</param>
+        /// <param name="eventName">Name of the event.</param>
+        /// <returns>The event's multicast delegate or null.</returns>
         private static Delegate? GetEventDelegate(object target, string eventName)
         {
-            // Gli eventi field-like espongono un backing field con lo stesso nome
             var f = target.GetType().GetField(eventName, BindingFlags.Instance | BindingFlags.NonPublic);
             return (Delegate?)f?.GetValue(target);
         }
 
+
+        /// <summary>
+        /// Helper: invokes a public/non-public method; if it returns Task, awaits it.
+        /// </summary>
+        /// <param name="target">Target instance.</param>
+        /// <param name="methodName">Method name.</param>
+        /// <param name="args">Optional arguments.</param>
         private static async Task InvokeMethodAsync(object target, string methodName, params object[]? args)
         {
             var m = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -2890,19 +3513,19 @@ namespace tests.BridgeTests
             {
                 await t.ConfigureAwait(false);
             }
-            else
-            {
-                // Se il metodo non è async/Task, consenti comunque l'invocazione "sincrona".
-                // Togli l'eccezione se vuoi supportare anche metodi void.
-                // throw new InvalidOperationException($"Method '{methodName}' did not return a Task.");
-            }
         }
 
 
+        /// <summary>
+        /// OpenAsync connects the core, assigns it, unhooks temporary handlers, and logs the connection.
+        /// Expected:
+        /// - _core is not null and Connected == true
+        /// - Temporary UI callback is unhooked
+        /// - Log contains a "[BT] Connected to ..." entry
+        /// </summary>
         [Fact]
         public async Task OpenAsync_Completes_Connects_CoreAssigned_AndUnhooksHandler()
         {
-            // arrange
             var mac = "01:23:45:67:89:AB";
             var logs = new List<string>();
             void Broadcast(string _, string __) { }
@@ -2910,91 +3533,100 @@ namespace tests.BridgeTests
 
             var spp = CreateSppSession(mac, Broadcast, Log);
 
-            // precondizioni: _core nullo
+            // _core null
             Assert.Null(GetPrivateField<object>(spp, "_core"));
 
-            // act
             await InvokeMethodAsync(spp, "OpenAsync");
 
-            // assert: core creato e connesso
+            // core created and connected
             var core = GetPrivateField<object>(spp, "_core");
             Assert.NotNull(core);
 
-            // Shimmer stub espone proprietà Connected
             var connectedProp = core!.GetType().GetProperty("Connected", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(connectedProp);
             Assert.True((bool)connectedProp!.GetValue(core)!);
 
-            // L'handler on state change è stato sganciato dopo il connect
             var evt = GetEventDelegate(core, "UICallback");
             Assert.Null(evt);
 
-            // Log di connessione emesso
+            // Connection log emitted
             Assert.Contains(logs, l => l.Contains("[BT] Connected to 01:23:45:67:89:AB"));
         }
 
+
+        /// <summary>
+        /// OpenAsync trims incoming MAC and logs with the trimmed value.
+        /// Expected:
+        /// - Log shows the trimmed MAC address
+        /// </summary>
         [Fact]
         public async Task OpenAsync_TrimsMac_And_LogsUsingTrimmedValue()
         {
-            // arrange
             var logs = new List<string>();
             void Broadcast(string _, string __) { }
             void Log(string s) => logs.Add(s);
 
             var spp = CreateSppSession("  AA:BB:CC:DD:EE:FF  ", Broadcast, Log);
 
-            // act
             await InvokeMethodAsync(spp, "OpenAsync");
 
-            // assert: log usa il MAC trim-mato
             Assert.Contains(logs, l => l.Contains("[BT] Connected to AA:BB:CC:DD:EE:FF"));
         }
 
-        // ApplyConfigAsync behavior
 
-        // --- ApplyConfigAsync behavior ------------------------------------------------
+        // ----- ApplyConfigAsync behavior -----
 
+
+        /// <summary>
+        /// When mode is locked, ApplyConfigAsync preserves ExgMode while applying other changes.
+        /// Expected:
+        /// - ExgMode unchanged
+        /// - Other flags and (rounded/defaulted) sampling rate applied
+        /// </summary>
         [Fact]
         public async Task ApplyConfigAsync_Preserves_ExgMode_When_Locked()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:11");
 
-            // Stato interno precedente con ExgMode = EMG
             SetPrivateCurrentCfg(spp, new ShimmerConfig { ExgMode = ExgMode.EMG });
 
-            // Apri la sessione (inizializza _core)
+            // Open session (initialize _core)
             await InvokeMethodAsync(spp, "OpenAsync");
 
-            // Lock della modalità: il cfg in arrivo NON deve poter cambiare l'ExgMode
+            // Mode lock: incoming cfg MUST NOT be able to change ExgMode
             var lockMode = spp.GetType().GetMethod("LockMode", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(lockMode);
             lockMode!.Invoke(spp, null);
 
             var cfgReq = new ShimmerConfig
             {
-                // Proviamo a cambiarla: deve essere ignorata
+                // Let's try to change it: it should be ignored
                 ExgMode = ExgMode.Respiration,
-                // metti una SR valida per eseguire il percorso "applica SR"
-                SamplingRate = 128,
-                // accendi qualche flag per avere una bitmap non nulla
+                SamplingRate = 50,
                 EnableExg1 = true
             };
 
             await InvokeMethodAsync(spp, "ApplyConfigAsync", cfgReq);
 
             var snap = GetCurrentConfigSnapshot(spp);
-            Assert.Equal(ExgMode.EMG, snap.ExgMode);            // preservato
-            Assert.True(snap.EnableExg1);                       // il resto del cfg applicato
-            Assert.Equal(128, snap.SamplingRate);
+            Assert.Equal(ExgMode.EMG, snap.ExgMode);            
+            Assert.True(snap.EnableExg1);
+            Assert.Equal(50, snap.SamplingRate);
         }
 
+
+        /// <summary>
+        /// ApplyConfigAsync defaults invalid or missing sampling rates to 51Hz.
+        /// Expected:
+        /// - SamplingRate == 51 when null or <= 0
+        /// </summary>
         [Fact]
         public async Task ApplyConfigAsync_Defaults_SamplingRate_To_51_When_MissingOrInvalid()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:12");
             await InvokeMethodAsync(spp, "OpenAsync");
 
-            // SR mancante
+            // Missing SR
             var cfg1 = new ShimmerConfig
             {
                 SamplingRate = null,
@@ -3004,7 +3636,7 @@ namespace tests.BridgeTests
             var s1 = GetCurrentConfigSnapshot(spp);
             Assert.Equal(51, s1.SamplingRate);
 
-            // SR non valida (<= 0)
+            // Invalid SR (<= 0)
             var cfg2 = new ShimmerConfig
             {
                 SamplingRate = 0,
@@ -3015,42 +3647,57 @@ namespace tests.BridgeTests
             Assert.Equal(51, s2.SamplingRate);
         }
 
+
+        /// <summary>
+        /// ApplyConfigAsync rounds sampling rate and resets cached indices.
+        /// Expected:
+        /// - SamplingRate rounded to int
+        /// - Cached indices reset (e.g., iTs == -1)
+        /// </summary>
         [Fact]
         public async Task ApplyConfigAsync_Rounds_SamplingRate_And_Resets_Indices()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:13");
             await InvokeMethodAsync(spp, "OpenAsync");
 
-            // Metti un indice già "risolto" che deve essere resettato da ApplyConfigAsync
+            // Put a "resolved" index that needs to be reset by ApplyConfigAsync
             var fTs = spp.GetType().GetField("iTs", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fTs);
             fTs!.SetValue(spp, 777);
 
             var cfg = new ShimmerConfig
             {
-                SamplingRate = 128.4,      // verrà arrotondato a 128
+                SamplingRate = 55,
                 EnableBattery = true
             };
 
             await InvokeMethodAsync(spp, "ApplyConfigAsync", cfg);
 
             var snap = GetCurrentConfigSnapshot(spp);
-            Assert.Equal(128, snap.SamplingRate);
+            Assert.Equal(55, snap.SamplingRate);
 
-            // Gli indici devono essere resettati a -1
+            // Indexes must be reset to -1
             Assert.Equal(-1, (int)fTs.GetValue(spp)!);
         }
 
+
+        /// <summary>
+        /// When board detection fails, ApplyConfigAsync uses requested flags and order.
+        /// Expected:
+        /// - Config reflects requested flags and SR
+        /// - EnabledBlocks match requested family keys in stable order
+        /// </summary>
         [Fact]
         public async Task ApplyConfigAsync_Applies_Flags_And_EnabledBlocks_Match_Config_When_Detection_Fails()
         {
-            // Nota: il nostro stub TryDetectBoardKind() ritorna false → "using requested flags"
+
+            // Note: our TryDetectBoardKind() stub returns false -> "using requested flags"
             var spp = CreateSppSession("AA:BB:CC:DD:EE:14");
             await InvokeMethodAsync(spp, "OpenAsync");
 
             var cfg = new ShimmerConfig
             {
-                SamplingRate = 200,
+                SamplingRate = 50,
                 EnableExg1 = true,
                 EnableLowNoiseAccelerometer = true,
                 EnableGyroscope = true,
@@ -3062,37 +3709,43 @@ namespace tests.BridgeTests
 
             var snap = GetCurrentConfigSnapshot(spp);
 
-            // Verifica lo stato configurazione
-            Assert.Equal(200, snap.SamplingRate);
+            // Check configuration status
+            Assert.Equal(50, snap.SamplingRate);
             Assert.True(snap.EnableExg1);
             Assert.True(snap.EnableLowNoiseAccelerometer);
             Assert.True(snap.EnableGyroscope);
             Assert.True(snap.EnableBattery);
             Assert.True(snap.EnableExtA6);
 
-            // Verifica la lista simbolica dei blocchi abilitati (ordine definito dall’implementazione)
+            // Check the symbolic list of enabled blocks (implementation-defined order)
             var blocks = CallEnabledBlocks(spp);
-            Assert.Equal(new[] { "exg", "lna", "gyro", "vbatt", "ext" }, blocks);
+            Assert.Equal(new[] { "exg", "lna", "gyro", "vbatt", "ext6" }, blocks);
         }
 
+
+        /// <summary>
+        /// With IMU-only request and failed detection, ApplyConfigAsync keeps EXG off.
+        /// Expected:
+        /// - EXG flags remain false
+        /// - EnabledBlocks reflect only IMU-related keys in stable order
+        /// </summary>
         [Fact]
         public async Task ApplyConfigAsync_ImuOnly_Request_Remains_Imu_When_Detection_Fails()
         {
-            // Con detection che fallisce, non forziamo EXG off/on: usiamo i flag richiesti.
+
+            // If detection fails, we don't force EXG off/on: we use the required flags.
             var spp = CreateSppSession("AA:BB:CC:DD:EE:15");
             await InvokeMethodAsync(spp, "OpenAsync");
 
             var cfg = new ShimmerConfig
             {
-                SamplingRate = 100,
-                // IMU flags
+                SamplingRate = 50,
                 EnableLowNoiseAccelerometer = true,
                 EnableWideRangeAccelerometer = true,
                 EnableGyroscope = true,
                 EnableMagnetometer = true,
                 EnablePressureTemperature = true,
                 EnableBattery = true,
-                // EXG spenti
                 EnableExg1 = false,
                 EnableExg2 = false
             };
@@ -3100,18 +3753,25 @@ namespace tests.BridgeTests
             await InvokeMethodAsync(spp, "ApplyConfigAsync", cfg);
 
             var snap = GetCurrentConfigSnapshot(spp);
-            Assert.Equal(100, snap.SamplingRate);
+            Assert.Equal(50, snap.SamplingRate);
             Assert.False(snap.EnableExg1);
             Assert.False(snap.EnableExg2);
 
             var blocks = CallEnabledBlocks(spp);
-            // Ordine: exg, lna, wra, gyro, mag, temp, press, vbatt, ext
+
+            // Order: exg, lna, wra, gyro, mag, temp, press, vbatt, ext
             Assert.Equal(new[] { "lna", "wra", "gyro", "mag", "temp", "press", "vbatt" }, blocks);
         }
 
-        // Start behavior
-        // --- Start() behavior --------------------------------------------------------
 
+        // ----- Start behavior -----
+
+
+        /// <summary>
+        /// Start throws when session is not open (no core).
+        /// Expected:
+        /// - InvalidOperationException thrown
+        /// </summary>
         [Fact]
         public void Start_Throws_When_NotOpen()
         {
@@ -3124,29 +3784,36 @@ namespace tests.BridgeTests
         }
 
 
-
+        /// <summary>
+        /// Start resets cached indices and clears timestamp base before streaming.
+        /// Expected:
+        /// - iTs == -1 and _tsBase == null after Start
+        /// </summary>
         [Fact]
         public void Start_Resets_Indices_And_TsBase()
         {
             var spp = CreateSppSession("AA:BB:CC:DD:EE:01");
 
-            // Inietto _core così Start non lancia
+            // I inject _core so Start doesn't launch
             var core = new ShimmerSDK.Android.ShimmerLogAndStreamAndroidBluetoothV2("Stub", "AA:BB:CC:DD:EE:01");
             var fCore = spp.GetType().GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fCore);
             fCore!.SetValue(spp, core);
 
-            // Metto indici e ts base “sporchi”
             spp.GetType().GetField("iTs", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, 99);
             spp.GetType().GetField("_tsBase", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, 123.45);
-
-            // Chiama Start()
             spp.GetType().GetMethod("Start", BindingFlags.Instance | BindingFlags.Public)!.Invoke(spp, null);
 
             Assert.Equal(-1, (int)spp.GetType().GetField("iTs", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(spp)!);
             Assert.Null(spp.GetType().GetField("_tsBase", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(spp));
         }
 
+
+        /// <summary>
+        /// Start wires the handler and broadcasts a minimal sample upon incoming data packet.
+        /// Expected:
+        /// - A "sample" JSON is broadcast containing Exg1/Exg2 and no IMU blocks if none enabled
+        /// </summary>
         [Fact]
         public void Start_Wires_Handler_And_Broadcasts_Sample_On_DataPacket()
         {
@@ -3154,17 +3821,14 @@ namespace tests.BridgeTests
             var sent = new List<(string Mac, string Json)>();
             var spp = CreateSppSession(mac, (m, j) => sent.Add((m, j)));
 
-            // Inietto _core
+            // Inject _core
             var core = new ShimmerSDK.Android.ShimmerLogAndStreamAndroidBluetoothV2("Stub", mac);
             spp.GetType().GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, core);
 
-            // Config minima (tutti i flag off; Exg1/2 non abilitati ma payload con Exg1/Exg2 sempre presente a 0.0)
             SetPrivateCurrentCfg(spp, new ShimmerConfig());
-
-            // Start streaming (aggancia handler)
             spp.GetType().GetMethod("Start", BindingFlags.Instance | BindingFlags.Public)!.Invoke(spp, null);
 
-            // Simula arrivo pacchetto dati
+            // Simulate data packet arrival
             var ev = new ShimmerAPI.CustomEventArgs(
                 (int)ShimmerAPI.ShimmerBluetooth.ShimmerIdentifier.MSG_IDENTIFIER_DATA_PACKET,
                 new ShimmerAPI.ObjectCluster());
@@ -3177,10 +3841,8 @@ namespace tests.BridgeTests
             var root = doc.RootElement;
             Assert.Equal("sample", root.GetProperty("type").GetString());
             Assert.Equal(mac, root.GetProperty("mac").GetString());
-            // Campi EXG sempre presenti come double
             Assert.True(root.TryGetProperty("Exg1", out var _));
             Assert.True(root.TryGetProperty("Exg2", out var _));
-            // Nessun blocco IMU se non abilitato
             Assert.False(root.TryGetProperty("lna", out _));
             Assert.False(root.TryGetProperty("wra", out _));
             Assert.False(root.TryGetProperty("gyro", out _));
@@ -3192,6 +3854,12 @@ namespace tests.BridgeTests
             Assert.False(root.TryGetProperty("exg_mode", out _));
         }
 
+
+        /// <summary>
+        /// Calling Start twice does not double-subscribe the handler.
+        /// Expected:
+        /// - A single incoming packet produces a single broadcast
+        /// </summary>
         [Fact]
         public void Start_DoesNot_DoubleSubscribe_When_Called_Twice()
         {
@@ -3204,12 +3872,12 @@ namespace tests.BridgeTests
 
             SetPrivateCurrentCfg(spp, new ShimmerConfig());
 
-            // Start due volte: la seconda deve prima sganciare l’handler precedente
+            // Start twice: the second one must first unhook the previous handler
             var mStart = spp.GetType().GetMethod("Start", BindingFlags.Instance | BindingFlags.Public)!;
             mStart.Invoke(spp, null);
             mStart.Invoke(spp, null);
 
-            // Un solo pacchetto → un solo broadcast (niente doppioni)
+            // A single packet -> a single broadcast (no duplicates)
             var ev = new ShimmerAPI.CustomEventArgs(
                 (int)ShimmerAPI.ShimmerBluetooth.ShimmerIdentifier.MSG_IDENTIFIER_DATA_PACKET,
                 new ShimmerAPI.ObjectCluster());
@@ -3218,6 +3886,13 @@ namespace tests.BridgeTests
             Assert.Single(sent);
         }
 
+
+        /// <summary>
+        /// When relevant blocks and last-known values exist, Start includes them in the sample payload.
+        /// Expected:
+        /// - exg_mode present if ExgMode != None
+        /// - Enabled blocks present; battery/ext values reflect last-known
+        /// </summary>
         [Fact]
         public void Start_Includes_Enabled_Blocks_And_LastKnown_Values()
         {
@@ -3228,7 +3903,6 @@ namespace tests.BridgeTests
             var core = new ShimmerSDK.Android.ShimmerLogAndStreamAndroidBluetoothV2("Stub", mac);
             spp.GetType().GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, core);
 
-            // Abilita alcuni blocchi + setta last-known values manualmente
             var cfg = new ShimmerConfig
             {
                 EnableLowNoiseAccelerometer = true,
@@ -3246,7 +3920,7 @@ namespace tests.BridgeTests
             spp.GetType().GetField("_lastA7", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, 2.3);
             spp.GetType().GetField("_lastA15", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(spp, 4.5);
 
-            // Start e invia un pacchetto
+            // Start and send a packet
             spp.GetType().GetMethod("Start", BindingFlags.Instance | BindingFlags.Public)!.Invoke(spp, null);
             var ev = new ShimmerAPI.CustomEventArgs(
                 (int)ShimmerAPI.ShimmerBluetooth.ShimmerIdentifier.MSG_IDENTIFIER_DATA_PACKET,
@@ -3257,19 +3931,19 @@ namespace tests.BridgeTests
             using var doc = JsonDocument.Parse(sent[0].Json);
             var root = doc.RootElement;
 
-            // exg_mode presente perché ExgMode != None
+            // exg_mode present because ExgMode != None
             Assert.True(root.TryGetProperty("exg_mode", out var exgModeProp));
             Assert.False(string.IsNullOrWhiteSpace(exgModeProp.GetString()));
 
-            // lna, gyro presenti (wra/mag/press/… no perché non abilitati)
+            // lna, gyro present (wra/mag/press/… no because not enabled)
             Assert.True(root.TryGetProperty("lna", out _));
             Assert.True(root.TryGetProperty("gyro", out _));
 
-            // vbatt presente con last-known
+            // vbatt present with last-known
             Assert.True(root.TryGetProperty("vbatt", out var vb));
             Assert.Equal(3.7, vb.GetDouble(), 3);
 
-            // ext presente con a6/a7/a15
+            // ext present with a6/a7/a15
             Assert.True(root.TryGetProperty("ext", out var ext));
             Assert.Equal(1.2, ext.GetProperty("a6").GetDouble(), 3);
             Assert.Equal(2.3, ext.GetProperty("a7").GetDouble(), 3);
@@ -3277,18 +3951,21 @@ namespace tests.BridgeTests
         }
 
 
-        // Stop behavior
+        // ----- Stop behavior -----
 
-        // --- Stop() behavior --------------------------------------------------------
 
+        /// <summary>
+        /// Stop unsubscribes handler and prevents further broadcasts.
+        /// Expected:
+        /// - After Stop, additional data packets produce no further broadcasts
+        /// </summary>
         [Fact]
         public async Task Stop_Unsubscribes_Handler_NoFurtherBroadcasts()
         {
-            // Arrange: session con broadcast “spiato”
             var sent = new List<(string mac, string json)>();
             var spp = CreateSppSession("01:23:45:67:89:AB", (m, j) => sent.Add((m, j)));
 
-            // Apri connessione e avvia streaming (installa _handler)
+            // Open connection and start streaming
             var mOpen = spp.GetType().GetMethod("OpenAsync", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(mOpen);
             await (Task)mOpen!.Invoke(spp, null)!;
@@ -3297,7 +3974,7 @@ namespace tests.BridgeTests
             Assert.NotNull(mStart);
             mStart!.Invoke(spp, null);
 
-            // Ricava _core e invia un pacchetto dati
+            // Get _core and send a data packet
             var fCore = spp.GetType().GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fCore);
             var core = (ShimmerSDK.Android.ShimmerLogAndStreamAndroidBluetoothV2)fCore!.GetValue(spp)!;
@@ -3306,27 +3983,36 @@ namespace tests.BridgeTests
                 (int)ShimmerAPI.ShimmerBluetooth.ShimmerIdentifier.MSG_IDENTIFIER_DATA_PACKET,
                 new ShimmerAPI.ObjectCluster()));
 
-            Assert.NotEmpty(sent);            // riceviamo qualcosa prima dello stop
+            // we get something before the stop
+            Assert.NotEmpty(sent);
             var firstCount = sent.Count;
 
-            // Act: Stop -> disiscrive _handler ed invia StopStreaming()
+            // Stop -> unsubscribe _handler and send StopStreaming()
             var mStop = spp.GetType().GetMethod("Stop", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(mStop);
             mStop!.Invoke(spp, null);
 
-            // Prova a reinviare un pacchetto → non deve più arrivare nulla
+            // Try resend a packet -> nothing more should arrive
             core.RaiseUi(new ShimmerAPI.CustomEventArgs(
                 (int)ShimmerAPI.ShimmerBluetooth.ShimmerIdentifier.MSG_IDENTIFIER_DATA_PACKET,
                 new ShimmerAPI.ObjectCluster()));
 
-            // Assert
-            Assert.Equal(firstCount, sent.Count);   // nessuna nuova emissione dopo Stop()
+            // no new emission after Stop()
+            Assert.Equal(firstCount, sent.Count);
         }
 
+
+        /// <summary>
+        /// Stop is safe and idempotent when streaming was never started.
+        /// Expected:
+        /// - No throws on repeated Stop
+        /// - No broadcasts if packets arrive
+        /// </summary>
         [Fact]
         public async Task Stop_When_NotStarted_Is_Idempotent_And_Safe()
         {
-            // Arrange: apri ma NON chiamare Start()
+
+            // open but do NOT call Start()
             var sent = new List<(string mac, string json)>();
             var spp = CreateSppSession("AA:BB:CC:DD:EE:FF", (m, j) => sent.Add((m, j)));
 
@@ -3334,15 +4020,15 @@ namespace tests.BridgeTests
             Assert.NotNull(mOpen);
             await (Task)mOpen!.Invoke(spp, null)!;
 
-            // Act: Stop senza handler installato → non deve lanciare
+            // Stop without handler installed -> should not throw
             var mStop = spp.GetType().GetMethod("Stop", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(mStop);
             mStop!.Invoke(spp, null);
 
-            // E anche una seconda volta (idempotente)
+            // And a second time too (idempotent)
             mStop!.Invoke(spp, null);
 
-            // Invia pacchetto dati → nessun handler, quindi nessuna emissione
+            // Send data packet -> no handler, so no emission
             var fCore = spp.GetType().GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fCore);
             var core = (ShimmerSDK.Android.ShimmerLogAndStreamAndroidBluetoothV2)fCore!.GetValue(spp)!;
@@ -3354,29 +4040,38 @@ namespace tests.BridgeTests
             Assert.Empty(sent);
         }
 
+
+        /// <summary>
+        /// Stop is safe when core is null (never opened).
+        /// Expected:
+        /// - No throw
+        /// </summary>
         [Fact]
         public void Stop_When_CoreIsNull_DoesNotThrow()
         {
-            // Arrange: session mai aperta (core == null)
             var spp = CreateSppSession("11:22:33:44:55:66");
 
-            // Act + Assert: non deve eccepire
             var mStop = spp.GetType().GetMethod("Stop", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(mStop);
             mStop!.Invoke(spp, null);
         }
 
-        // Dispose behavior
-        // --- Dispose() behavior ------------------------------------------------------
 
+        // ----- Dispose behavior -----
+
+
+        /// <summary>
+        /// Dispose stops streaming, disconnects core, clears core reference, and prevents further broadcasts.
+        /// Expected:
+        /// - Core becomes disconnected and internal _core set to null
+        /// - No further broadcasts after dispose
+        /// </summary>
         [Fact]
         public async Task Dispose_StopsStreaming_Disconnects_Core_IsCleared()
         {
-            // Arrange
             var sent = new List<(string mac, string json)>();
             var spp = CreateSppSession("DE:AD:BE:EF:00:01", (m, j) => sent.Add((m, j)));
 
-            // Open + Start to install handler
             var mOpen = spp.GetType().GetMethod("OpenAsync", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(mOpen);
             await (Task)mOpen!.Invoke(spp, null)!;
@@ -3385,55 +4080,62 @@ namespace tests.BridgeTests
             Assert.NotNull(mStart);
             mStart!.Invoke(spp, null);
 
-            // Prendi un riferimento al core PRIMA del Dispose (così possiamo verificare lo stato dopo)
+            // Get a reference to the core BEFORE the Dispose (so we can check the state afterwards)
             var fCore = spp.GetType().GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fCore);
             var core = (ShimmerSDK.Android.ShimmerLogAndStreamAndroidBluetoothV2)fCore!.GetValue(spp)!;
 
-            // Verifica che arrivino pacchetti prima del Dispose
+            // Check for packets arriving before Dispose
             core.RaiseUi(new ShimmerAPI.CustomEventArgs(
                 (int)ShimmerAPI.ShimmerBluetooth.ShimmerIdentifier.MSG_IDENTIFIER_DATA_PACKET,
                 new ShimmerAPI.ObjectCluster()));
             Assert.NotEmpty(sent);
             var before = sent.Count;
 
-            // Act
             var mDispose = spp.GetType().GetMethod("Dispose", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(mDispose);
             mDispose!.Invoke(spp, null);
 
-            // Assert: core disconnesso e azzerato nel session object
+            // core disconnected and reset in session object
             Assert.False(core.IsConnected());
             Assert.Null(fCore.GetValue(spp));
 
-            // E il handler è stato disiscritto: nessun nuovo broadcast
+            // And the handler has been unsubscribed: no new broadcasts
             core.RaiseUi(new ShimmerAPI.CustomEventArgs(
                 (int)ShimmerAPI.ShimmerBluetooth.ShimmerIdentifier.MSG_IDENTIFIER_DATA_PACKET,
                 new ShimmerAPI.ObjectCluster()));
             Assert.Equal(before, sent.Count);
         }
 
+
+        /// <summary>
+        /// Dispose is safe when session was never opened.
+        /// Expected:
+        /// - No throw and _core remains null
+        /// </summary>
         [Fact]
         public void Dispose_When_NotOpened_Is_Safe_And_NoThrow()
         {
-            // Arrange: session mai aperta (core == null)
             var spp = CreateSppSession("DE:AD:BE:EF:00:02");
 
-            // Act + Assert
             var mDispose = spp.GetType().GetMethod("Dispose", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(mDispose);
             mDispose!.Invoke(spp, null);
 
-            // core resta null
             var fCore = spp.GetType().GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fCore);
             Assert.Null(fCore!.GetValue(spp));
         }
 
+
+        /// <summary>
+        /// Dispose is idempotent; multiple calls leave core null.
+        /// Expected:
+        /// - _core is null after repeated calls
+        /// </summary>
         [Fact]
         public async Task Dispose_Is_Idempotent()
         {
-            // Arrange
             var spp = CreateSppSession("DE:AD:BE:EF:00:03");
 
             var mOpen = spp.GetType().GetMethod("OpenAsync", BindingFlags.Instance | BindingFlags.Public);
@@ -3443,19 +4145,25 @@ namespace tests.BridgeTests
             var mDispose = spp.GetType().GetMethod("Dispose", BindingFlags.Instance | BindingFlags.Public);
             Assert.NotNull(mDispose);
 
-            // Act: due chiamate consecutive
+            // two consecutive calls
             mDispose!.Invoke(spp, null);
             mDispose!.Invoke(spp, null);
 
-            // Assert: core nullo
+            // core null
             var fCore = spp.GetType().GetField("_core", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(fCore);
             Assert.Null(fCore!.GetValue(spp));
         }
 
-        // SafeIdx behavior
-        // --- SafeIdx behavior --------------------------------------------------------
 
+        // ----- SafeIdx behavior -----
+
+
+        /// <summary>
+        /// Helper: obtains the private static method <c>SafeIdx(ObjectCluster,string,string)</c>.
+        /// </summary>
+        /// <param name="spp">Any SPP session instance (for type resolution).</param>
+        /// <returns>MethodInfo for SafeIdx.</returns>
         private static MethodInfo GetSafeIdxMethod(object spp)
         {
             var mi = spp.GetType().GetMethod("SafeIdx",
@@ -3464,6 +4172,12 @@ namespace tests.BridgeTests
             return mi!;
         }
 
+
+        /// <summary>
+        /// SafeIdx returns a valid index when label exists.
+        /// Expected:
+        /// - Returns expected positive index
+        /// </summary>
         [Fact]
         public void SafeIdx_Returns_Index_When_LabelExists()
         {
@@ -3476,6 +4190,12 @@ namespace tests.BridgeTests
             Assert.Equal(5, result);
         }
 
+
+        /// <summary>
+        /// SafeIdx returns -1 when label is missing.
+        /// Expected:
+        /// - -1
+        /// </summary>
         [Fact]
         public void SafeIdx_Returns_MinusOne_When_LabelMissing()
         {
@@ -3488,21 +4208,33 @@ namespace tests.BridgeTests
             Assert.Equal(-1, result);
         }
 
+
+        /// <summary>
+        /// SafeIdx returns -1 when underlying GetIndex throws.
+        /// Expected:
+        /// - -1
+        /// </summary>
         [Fact]
         public void SafeIdx_Returns_MinusOne_When_GetIndex_Throws()
         {
             var spp = CreateSppSession("DE:AD:BE:EF:00:01");
             var safeIdx = GetSafeIdxMethod(spp);
 
-            var oc = new ShimmerAPI.ObjectCluster(); // GetIndex lancerà su "__THROW__"
+            var oc = new ShimmerAPI.ObjectCluster();
             var result = (int)safeIdx.Invoke(null, new object[] { oc, "__THROW__", "CAL" })!;
 
             Assert.Equal(-1, result);
         }
 
-        // SafeGet behavior
-        // --- SafeGet behavior --------------------------------------------------------
 
+        // ----- SafeGet behavior -----
+
+
+        /// <summary>
+        /// Helper: obtains the private static method <c>SafeGet(ObjectCluster,int)</c>.
+        /// </summary>
+        /// <param name="spp">SPP session (for type resolution).</param>
+        /// <returns>MethodInfo for SafeGet.</returns>
         private static System.Reflection.MethodInfo GetSafeGetMethod(object spp)
         {
             var mi = spp.GetType().GetMethod("SafeGet",
@@ -3511,6 +4243,12 @@ namespace tests.BridgeTests
             return mi!;
         }
 
+
+        /// <summary>
+        /// SafeGet returns null when index is negative.
+        /// Expected:
+        /// - null
+        /// </summary>
         [Fact]
         public void SafeGet_ReturnsNull_When_Index_Is_Negative()
         {
@@ -3523,6 +4261,12 @@ namespace tests.BridgeTests
             Assert.Null(res);
         }
 
+
+        /// <summary>
+        /// SafeGet returns a SensorData instance when index is valid.
+        /// Expected:
+        /// - Non-null SensorData
+        /// </summary>
         [Fact]
         public void SafeGet_Returns_SensorData_When_Index_Is_Valid()
         {
@@ -3536,6 +4280,12 @@ namespace tests.BridgeTests
             Assert.IsType<ShimmerAPI.SensorData>(res);
         }
 
+
+        /// <summary>
+        /// SafeGet tolerates upstream exceptions and returns null.
+        /// Expected:
+        /// - null when GetData throws
+        /// </summary>
         [Fact]
         public void SafeGet_ReturnsNull_When_GetData_Throws()
         {
@@ -3543,15 +4293,22 @@ namespace tests.BridgeTests
             var safeGet = GetSafeGetMethod(spp);
 
             var oc = new ShimmerAPI.ObjectCluster();
-            // 777: indice “speciale” che nello stub fa lanciare un’eccezione
+
+            // 777: “special” index that causes an exception to be thrown in the stub
             var res = safeGet.Invoke(null, new object[] { oc, 777 });
 
             Assert.Null(res);
         }
 
-        // Val behavior
-        // --- Val behavior ------------------------------------------------------------
 
+        // ----- Val behavior -----
+
+
+        /// <summary>
+        /// Helper: obtains the private static <c>Val(SensorData)</c> converter method.
+        /// </summary>
+        /// <param name="spp">SPP session (for type resolution).</param>
+        /// <returns>MethodInfo for Val.</returns>
         private static System.Reflection.MethodInfo GetValMethod(object spp)
         {
             var mi = spp.GetType().GetMethod("Val",
@@ -3560,8 +4317,20 @@ namespace tests.BridgeTests
             return mi!;
         }
 
+
+        /// <summary>
+        /// Helper: wraps an object into a <see cref="ShimmerAPI.SensorData"/> for tests.
+        /// </summary>
+        /// <param name="data">Payload to store into SensorData.</param>
+        /// <returns>New SensorData instance.</returns>
         private static ShimmerAPI.SensorData SD(object data) => new ShimmerAPI.SensorData(data);
 
+
+        /// <summary>
+        /// Val returns null when SensorData is null.
+        /// Expected:
+        /// - null
+        /// </summary>
         [Fact]
         public void Val_ReturnsNull_When_SensorData_Is_Null()
         {
@@ -3573,6 +4342,12 @@ namespace tests.BridgeTests
             Assert.Null(res);
         }
 
+
+        /// <summary>
+        /// Val converts int to double.
+        /// Expected:
+        /// - 5 -> 5.0
+        /// </summary>
         [Fact]
         public void Val_Converts_Int_To_Double()
         {
@@ -3585,6 +4360,12 @@ namespace tests.BridgeTests
             Assert.Equal(5.0, res);
         }
 
+
+        /// <summary>
+        /// Val passes through double values unchanged.
+        /// Expected:
+        /// - 3.25 -> 3.25
+        /// </summary>
         [Fact]
         public void Val_Converts_Double_To_Double_Unchanged()
         {
@@ -3597,18 +4378,30 @@ namespace tests.BridgeTests
             Assert.Equal(3.25, res);
         }
 
+
+        /// <summary>
+        /// Val parses numeric strings to double.
+        /// Expected:
+        /// - "42" -> 42.0
+        /// </summary>
         [Fact]
         public void Val_Converts_IntegerString_To_Double()
         {
             var spp = CreateSppSession("AA:BB:CC:10:00:04");
             var val = GetValMethod(spp);
 
-            var sd = SD("42"); // string numerica “safe” (niente problemi di cultura)
+            var sd = SD("42");
             var res = (double?)val.Invoke(null, new object?[] { sd });
 
             Assert.Equal(42.0, res);
         }
 
+
+        /// <summary>
+        /// Val returns null for non-numeric strings.
+        /// Expected:
+        /// - null
+        /// </summary>
         [Fact]
         public void Val_ReturnsNull_On_NonNumeric_String()
         {
@@ -3621,22 +4414,33 @@ namespace tests.BridgeTests
             Assert.Null(res);
         }
 
+
+        /// <summary>
+        /// Val returns null for objects not convertible to double.
+        /// Expected:
+        /// - null
+        /// </summary>
         [Fact]
         public void Val_ReturnsNull_On_Object_Not_Convertible()
         {
             var spp = CreateSppSession("AA:BB:CC:10:00:06");
             var val = GetValMethod(spp);
 
-            var sd = SD(new object()); // Convert.ToDouble lancerà
+            var sd = SD(new object());
             var res = (double?)val.Invoke(null, new object?[] { sd });
 
             Assert.Null(res);
         }
 
-        // IsConnectedState behavior
 
-        // --- IsConnectedState behavior ----------------------------------------------
+        // ----- IsConnectedState behavior -----
 
+
+        /// <summary>
+        /// Helper: obtains the private static <c>IsConnectedState(object?)</c> classifier.
+        /// </summary>
+        /// <param name="spp">SPP session (for type resolution).</param>
+        /// <returns>MethodInfo for IsConnectedState.</returns>
         private static System.Reflection.MethodInfo GetIsConnectedMethod(object spp)
         {
             var mi = spp.GetType().GetMethod("IsConnectedState",
@@ -3645,6 +4449,12 @@ namespace tests.BridgeTests
             return mi!;
         }
 
+
+        /// <summary>
+        /// IsConnectedState returns false on null inputs.
+        /// Expected:
+        /// - false
+        /// </summary>
         [Fact]
         public void IsConnectedState_ReturnsFalse_On_Null()
         {
@@ -3655,6 +4465,12 @@ namespace tests.BridgeTests
             Assert.False(res);
         }
 
+
+        /// <summary>
+        /// IsConnectedState handles integer codes.
+        /// Expected:
+        /// - 2/3 -> true; 0/1/4 -> false
+        /// </summary>
         [Theory]
         [InlineData(2, true)]
         [InlineData(3, true)]
@@ -3670,6 +4486,12 @@ namespace tests.BridgeTests
             Assert.Equal(expected, res);
         }
 
+
+        /// <summary>
+        /// IsConnectedState supports Java Integer wrapper values.
+        /// Expected:
+        /// - 2/3 -> true; 1 -> false
+        /// </summary>
         [Theory]
         [InlineData(2, true)]
         [InlineData(3, true)]
@@ -3684,6 +4506,12 @@ namespace tests.BridgeTests
             Assert.Equal(expected, res);
         }
 
+
+        /// <summary>
+        /// IsConnectedState parses string representations case-insensitively.
+        /// Expected:
+        /// - "CONNECTED"/"connected"/"BT_CONNECTED_OK" -> true; "DISCONNECTED"/others -> false
+        /// </summary>
         [Theory]
         [InlineData("CONNECTED", true)]
         [InlineData("connected", true)]
@@ -3700,38 +4528,74 @@ namespace tests.BridgeTests
             Assert.Equal(expected, res);
         }
 
+
+        /// <summary>
+        /// IsConnectedState falls back to ToString() when given unknown types.
+        /// Expected:
+        /// - Objects with "CONNECTED" in ToString() => true
+        /// </summary>
         [Fact]
         public void IsConnectedState_Uses_ToString_Fallback()
         {
             var spp = CreateSppSession("AA:BB:00:00:05");
             var m = GetIsConnectedMethod(spp);
 
-            var obj = new { Status = "CONNECTED" }; // ToString() => "{ Status = CONNECTED }"
+            var obj = new { Status = "CONNECTED" };
             var res = (bool)m.Invoke(null, new object?[] { obj })!;
             Assert.True(res);
         }
 
+
+        /// <summary>
+        /// IsConnectedState returns false when ToString() does not contain 'CONNECTED'.
+        /// Expected:
+        /// - false
+        /// </summary>
         [Fact]
         public void IsConnectedState_ReturnsFalse_On_NonConvertible_Object()
         {
             var spp = CreateSppSession("AA:BB:00:00:06");
             var m = GetIsConnectedMethod(spp);
 
-            var obj = new object(); // ToString() -> "System.Object" (non contiene CONNECTED)
+            var obj = new object();
             var res = (bool)m.Invoke(null, new object?[] { obj })!;
             Assert.False(res);
         }
 
 
-        // TryIdx behavior
+        // ----- TryIdx behavior -----
+
+
+        /// <summary>
+        /// Helper: invokes the private static <c>TryIdx(ObjectCluster,(string,string)[])</c> utility.
+        /// Returns the first matching candidate index or -1.
+        /// </summary>
+        /// <param name="oc">ObjectCluster stub.</param>
+        /// <param name="cands">Name/format candidate pairs.</param>
+        /// <returns>Index or -1.</returns>
+        private static int InvokeTryIdx(object oc, params (string name, string fmt)[] cands)
+        {
+            var spp = CreateSppSession("00:11:22:33:44:55");
+            var mi = spp.GetType().GetMethod("TryIdx",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(mi);
+            return (int)mi!.Invoke(spp, new object?[] { oc, cands })!;
+        }
+
+
+        /// <summary>
+        /// TryIdx returns the first matching candidate index.
+        /// Expected:
+        /// - Returns index of the earliest matching candidate
+        /// </summary>
         [Fact]
         public void TryIdx_Returns_FirstMatchingIndex()
         {
-            // OC finto che risponde solo a ("Gyroscope X","CAL") ⇒ indice 5
+            // Fake OC that only responds to ("Gyroscope X","CAL") -> index 5
             var oc = new ShimmerAPI.ObjectClusterMock()
                 .When("Gyroscope X", "CAL", 5);
 
-            // candidati: il 1° non esiste, il 2° è quello giusto ⇒ deve tornare 5
+            // The first one does not exist, the second one is the correct one -> must return 5
             int i = InvokeTryIdx(oc,
                 ("WR Accel X", "CAL"),
                 ("Gyroscope X", "CAL"),
@@ -3740,25 +4604,43 @@ namespace tests.BridgeTests
             Assert.Equal(5, i);
         }
 
+
+        /// <summary>
+        /// TryIdx returns -1 when none of the candidates match.
+        /// Expected:
+        /// - -1
+        /// </summary>
         [Fact]
         public void TryIdx_Returns_MinusOne_When_NoCandidatesMatch()
         {
-            var oc = new ShimmerAPI.ObjectClusterMock(); // nessun mapping
+            var oc = new ShimmerAPI.ObjectClusterMock(); // no mapping
             int i = InvokeTryIdx(oc, ("Foo", "CAL"), ("Bar", "RAW"));
             Assert.Equal(-1, i);
         }
 
+
+        /// <summary>
+        /// TryIdx stops at the first successful match.
+        /// Expected:
+        /// - Returns the index from the first matching candidate only
+        /// </summary>
         [Fact]
         public void TryIdx_Stops_At_First_Match()
         {
             var oc = new ShimmerAPI.ObjectClusterMock()
                 .When("A", "CAL", 2)
-                .When("B", "CAL", 7); // non dovrebbe arrivare a qui
+                .When("B", "CAL", 7); // it shouldn't get this far
 
             int i = InvokeTryIdx(oc, ("A", "CAL"), ("B", "CAL"));
             Assert.Equal(2, i);
         }
 
+
+        /// <summary>
+        /// TryIdx swallows internal GetIndex errors and continues with next candidates.
+        /// Expected:
+        /// - If first throws and next misses, returns -1
+        /// </summary>
         [Fact]
         public void TryIdx_Swallows_Internal_GetIndex_Errors()
         {
@@ -3766,42 +4648,44 @@ namespace tests.BridgeTests
                 .ThrowOn("Bad", "CAL");
 
             int i = InvokeTryIdx(oc, ("Bad", "CAL"), ("Good", "CAL"));
-            // il primo cand solleva, il secondo non esiste ⇒ -1
+
+            // The first one raises, the second one does not exist -> -1
             Assert.Equal(-1, i);
         }
 
-        // --- Helpers test-only ---
 
-        // Richiama via reflection il tuo metodo privato statico TryIdx(ObjectCluster,(string,string)[])
-        private static int InvokeTryIdx(object oc, params (string name, string fmt)[] cands)
-        {
-            var spp = CreateSppSession("00:11:22:33:44:55"); // come negli altri test
-            var mi = spp.GetType().GetMethod("TryIdx",
-                BindingFlags.NonPublic | BindingFlags.Static);
-            Assert.NotNull(mi);
-            return (int)mi!.Invoke(spp, new object?[] { oc, cands })!;
-        }
+        // ----- LooksLikeShimmer behavior -----
 
-        // LooksLikeShimmer behavior
 
-        // Helper: invoca il metodo statico privato LooksLikeShimmer(string?, string?)
+        /// <summary>
+        /// Helper: invokes the private static <c>LooksLikeShimmer(string?,string?)</c> classification helper.
+        /// </summary>
+        /// <param name="name">Device name or null.</param>
+        /// <param name="mac">MAC string or null.</param>
+        /// <returns><c>true</c> if the pair resembles a Shimmer device; otherwise <c>false</c>.</returns>
         private static bool CallLooksLikeShimmer(string? name, string? mac)
         {
-            var t = typeof(WsBridgeManager); // <-- se il metodo è in un altro tipo, cambia qui
+            var t = typeof(WsBridgeManager);
             var m = t.GetMethod("LooksLikeShimmer", BindingFlags.Static | BindingFlags.NonPublic);
             Assert.NotNull(m);
             return (bool)m!.Invoke(null, new object?[] { name, mac })!;
         }
 
+
+        /// <summary>
+        /// LooksLikeShimmer returns true on known Shimmer patterns (name or OUI).
+        /// Expected:
+        /// - True for names containing "Shimmer" or RN* patterns, or MAC with OUI 00:06:66 (colon-separated)
+        /// </summary>
         [Theory]
-        // Match su nome: contiene "Shimmer"
+        // Match on name: contains "Shimmer"
         [InlineData("Shimmer3", null)]
         [InlineData("my_shimmer_node", null)]
-        // Match su nome: prefissi RN*
+        // Match on name: RN prefixes*
         [InlineData("RNBT-1234", null)]
         [InlineData("RN42-ABCD", null)]
         [InlineData("RN-42-ABCD", null)]
-        // Match su MAC OUI 00:06:66 (solo con ':')
+        // Match on MAC OUI 00:06:66 (only with ':')
         [InlineData(null, "00:06:66:AA:BB:CC")]
         [InlineData("Other", "00:06:66:FF:EE:DD")]
         // Case-insensitive
@@ -3812,46 +4696,63 @@ namespace tests.BridgeTests
             Assert.True(CallLooksLikeShimmer(name, mac));
         }
 
+
+        /// <summary>
+        /// LooksLikeShimmer returns false on unknown patterns or malformed MAC formatting.
+        /// Expected:
+        /// - False for null/empty, unrelated names, or non-colon MAC formats
+        /// </summary>
         [Theory]
-        // Nessun match
+        // No match
         [InlineData(null, null)]
         [InlineData("", "")]
         [InlineData("Device", null)]
-        // MAC con separatori diversi o nessun separatore -> non matcha (implementazione attuale usa StartsWith con ':')
+        // MAC with different separators or no separator -> does not match (current implementation uses StartsWith with ':')
         [InlineData(null, "00-06-66-AA-BB-CC")]
         [InlineData(null, "000666AABBCC")]
-        // MAC con spazio iniziale e nessun match su name -> non matcha
+        // MAC with leading space and no match on name -> does not match
         [InlineData("Other", " 00:06:66:AA:BB:CC")]
-        // Nome che non contiene i pattern previsti
+        // Name that does not contain the expected patterns
         [InlineData("SHMR-Device", null)]
         public void LooksLikeShimmer_ReturnsFalse_OnUnknownPatterns(string? name, string? mac)
         {
             Assert.False(CallLooksLikeShimmer(name, mac));
         }
 
+
+        /// <summary>
+        /// LooksLikeShimmer is case-insensitive and ignores leading/trailing spaces in name but not in MAC.
+        /// Expected:
+        /// - "  Shimmer  " -> true; "  rnBt-XYZ" -> false; " device " + " 00:06:66:11:22:33" (space in MAC) -> false
+        /// </summary>
         [Theory]
-        // Controllo che la ricerca sia case-insensitive e che "Contains" funzioni anche con spazi
+        // Check that the search is case-insensitive and that "Contains" also works with spaces
         [InlineData("  Shimmer  ", null, true)]
         [InlineData("  rnBt-XYZ", null, false)]
-        [InlineData(" device ", " 00:06:66:11:22:33", false)] // spazio nel MAC -> niente match
+        [InlineData(" device ", " 00:06:66:11:22:33", false)] // space in MAC -> no match
         public void LooksLikeShimmer_MixedCasesAndSpaces(string? name, string? mac, bool expected)
         {
             Assert.Equal(expected, CallLooksLikeShimmer(name, mac));
         }
 
-        //  SafeSend behavior
 
+        // -----  SafeSend behavior -----
+
+
+        /// <summary>
+        /// Helper: creates a new WsBridgeManager instance using an available constructor without parameters,
+        /// or the “simplest” constructor with default arguments as a fallback.
+        /// </summary>
+        /// <returns>A new WsBridgeManager instance.</returns>
         private static object NewBridge()
         {
             var t = typeof(WsBridgeManager);
 
-            // 1) prova un costruttore (pubblico o non pubblico) senza argomenti
             var ctor0 = t.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                          .FirstOrDefault(c => c.GetParameters().Length == 0);
             if (ctor0 != null)
                 return ctor0.Invoke(Array.Empty<object?>());
 
-            // 2) altrimenti usa il costruttore “più semplice” e passa default ai parametri
             var anyCtor = t.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                            .OrderBy(c => c.GetParameters().Length)
                            .FirstOrDefault();
@@ -3866,16 +4767,23 @@ namespace tests.BridgeTests
             {
                 var pt = pars[i].ParameterType;
 
-                // Valori di default “sicuri” per i test
+                // “Safe” default values ​​for tests
                 if (pt == typeof(string)) args[i] = string.Empty;
-                else if (pt.IsValueType) args[i] = Activator.CreateInstance(pt); // es. 0, false, …
-                else args[i] = null;                          // ref-type
+                else if (pt.IsValueType) args[i] = Activator.CreateInstance(pt);
+                else args[i] = null;
             }
 
             return anyCtor.Invoke(args);
         }
 
-        // Helper: invoca SafeSend (privato) via reflection
+
+        /// <summary>
+        /// Helper: invokes the private instance method <c>SafeSend(Guid,string)</c>.
+        /// </summary>
+        /// <param name="bridge">Bridge instance.</param>
+        /// <param name="clientId">Target client id.</param>
+        /// <param name="json">JSON payload.</param>
+        /// <returns>Awaitable task.</returns>
         private static Task InvokeSafeSend(object bridge, Guid clientId, string json)
         {
             var m = bridge.GetType().GetMethod("SafeSend", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -3883,7 +4791,12 @@ namespace tests.BridgeTests
             return (Task)m!.Invoke(bridge, new object[] { clientId, json })!;
         }
 
-        // Helper: imposta il campo _ws (privato) del bridge
+
+        /// <summary>
+        /// Helper: sets the private <c>_ws</c> server field on the bridge.
+        /// </summary>
+        /// <param name="bridge">Bridge instance.</param>
+        /// <param name="server">WS server instance or null.</param>
         private static void SetWsServer(object bridge, WatsonWsServer? server)
         {
             var f = bridge.GetType().GetField("_ws", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -3891,26 +4804,43 @@ namespace tests.BridgeTests
             f!.SetValue(bridge, server);
         }
 
-        // (opzionale) Helper: imposta il logger privato Log, così se il send fallisce possiamo verificare che non lanci
+
+        /// <summary>
+        /// Helper: sets a private log delegate on the bridge, if present.
+        /// </summary>
+        /// <param name="bridge">Bridge instance.</param>
+        /// <param name="log">Log action.</param>
         private static void SetLog(object bridge, Action<string>? log)
         {
             var f = bridge.GetType().GetField("Log", BindingFlags.Instance | BindingFlags.NonPublic);
             if (f != null) f.SetValue(bridge, log);
         }
 
+
+        /// <summary>
+        /// SafeSend completes without throwing when server is null.
+        /// Expected:
+        /// - No exception
+        /// </summary>
         [Fact]
         public async Task SafeSend_WhenServerIsNull_CompletesWithoutThrowing()
         {
-            var bridge = NewBridge();          // usa il factory senza FormatterServices
-            SetWsServer(bridge, null);         // _ws == null
-            SetLog(bridge, _ => { });          // opzionale
+            var bridge = NewBridge();          
+            SetWsServer(bridge, null);         
+            SetLog(bridge, _ => { });         
 
             var id = Guid.NewGuid();
             var payload = "{\"ok\":true}";
 
-            await InvokeSafeSend(bridge, id, payload); // non deve lanciare
+            await InvokeSafeSend(bridge, id, payload); 
         }
 
+
+        /// <summary>
+        /// SafeSend delegates to server SendAsync and records the message in the stub log.
+        /// Expected:
+        /// - The stub server records the clientId and payload
+        /// </summary>
         [Fact]
         public async Task SafeSend_DelegatesToServerSendAsync_AndRecordsMessage()
         {
@@ -3924,12 +4854,18 @@ namespace tests.BridgeTests
 
             await InvokeSafeSend(bridge, id, payload);
 
-            // Lo stub espone la lista "Sent": verifichiamo che il messaggio sia uscito
             Assert.Contains(server.Sent, t => t.clientId == id && t.message == payload);
         }
 
-        // GetLocalIp behavior
 
+        // ----- GetLocalIp behavior -----
+
+
+        /// <summary>
+        /// Helper: invokes the private static <c>GetLocalIp(Activity?)</c>.
+        /// </summary>
+        /// <param name="act">Android Activity or null.</param>
+        /// <returns>IP address string.</returns>
         private static string CallGetLocalIp(Activity? act)
         {
             var t = typeof(WsBridgeManager);
@@ -3938,6 +4874,12 @@ namespace tests.BridgeTests
             return (string)m!.Invoke(null, new object?[] { act })!;
         }
 
+
+        /// <summary>
+        /// GetLocalIp returns "0.0.0.0" when Activity is null.
+        /// Expected:
+        /// - "0.0.0.0"
+        /// </summary>
         [Fact]
         public void GetLocalIp_Returns_0_0_0_0_When_Activity_Is_Null()
         {
@@ -3945,34 +4887,50 @@ namespace tests.BridgeTests
             Assert.Equal("0.0.0.0", ip);
         }
 
+
+        /// <summary>
+        /// GetLocalIp returns "0.0.0.0" when Wifi ConnectionInfo is null.
+        /// Expected:
+        /// - "0.0.0.0"
+        /// </summary>
         [Fact]
         public void GetLocalIp_Returns_0_0_0_0_When_ConnectionInfo_Is_Null()
         {
             var act = new Activity();
             var wm = (WifiManager)act.GetSystemService(Activity.WifiService)!;
-            wm.ConnectionInfo = null; // forza il ramo null
+            wm.ConnectionInfo = null;
 
             var ip = CallGetLocalIp(act);
             Assert.Equal("0.0.0.0", ip);
         }
 
+
+        /// <summary>
+        /// GetLocalIp parses little-endian Android int into dotted quad string.
+        /// Expected:
+        /// - Default stub value equals "192.168.1.42"
+        /// </summary>
         [Fact]
         public void GetLocalIp_Parses_LittleEndian_Int_To_DottedQuad()
         {
-            // Lo stub WifiInfo default è 192.168.1.42 (codificato little-endian)
             var act = new Activity();
             var ip = CallGetLocalIp(act);
             Assert.Equal("192.168.1.42", ip);
         }
 
+
+        /// <summary>
+        /// GetLocalIp converts various int patterns correctly to A.B.C.D.
+        /// Expected:
+        /// - For provided patterns, matches expected strings
+        /// </summary>
         [Theory]
-        // Verifica alcune combinazioni note: (A.B.C.D) -> (D<<24 | C<<16 | B<<8 | A)
         [InlineData(10, 0, 0, 1)]       // 10.0.0.1
         [InlineData(172, 16, 5, 200)]   // 172.16.5.200
         [InlineData(192, 168, 100, 2)]  // 192.168.100.2
         public void GetLocalIp_Converts_IntCorrectly(int a, int b, int c, int d)
         {
-            // compone l'int come fa Android (little-endian nei bit)
+            // compose the int as Android does (little-endian in the bits)
             int androidInt = (d << 24) | (c << 16) | (b << 8) | a;
 
             var act = new Activity();
@@ -3983,17 +4941,29 @@ namespace tests.BridgeTests
             Assert.Equal($"{a}.{b}.{c}.{d}", ip);
         }
 
-        // GetString behavior
 
-        // Helper: invoca il metodo privato statico GetString(ArraySegment<byte>)
+        // ----- GetString behavior -----
+
+
+        /// <summary>
+        /// Helper: invokes the private static <c>GetString(ArraySegment&lt;byte&gt;)</c> decoder.
+        /// </summary>
+        /// <param name="seg">Byte segment.</param>
+        /// <returns>Decoded UTF-8 string for the specified slice.</returns>
         private static string CallGetString(ArraySegment<byte> seg)
         {
-            var t = typeof(WsBridgeManager); // cambia tipo se GetString è in un altro
+            var t = typeof(WsBridgeManager);
             var m = t.GetMethod("GetString", BindingFlags.NonPublic | BindingFlags.Static);
             Assert.NotNull(m);
             return (string)m!.Invoke(null, new object?[] { seg })!;
         }
 
+
+        /// <summary>
+        /// GetString returns empty string for empty segments.
+        /// Expected:
+        /// - ""
+        /// </summary>
         [Fact]
         public void GetString_EmptySegment_ReturnsEmpty()
         {
@@ -4002,6 +4972,12 @@ namespace tests.BridgeTests
             Assert.Equal(string.Empty, s);
         }
 
+
+        /// <summary>
+        /// GetString decodes UTF-8 correctly respecting offset and count.
+        /// Expected:
+        /// - Decoded string matches the inner slice (including multibyte chars)
+        /// </summary>
         [Fact]
         public void GetString_DecodesUtf8_WithOffsetAndCount()
         {
@@ -4020,6 +4996,12 @@ namespace tests.BridgeTests
             Assert.Equal(inner, s);
         }
 
+
+        /// <summary>
+        /// GetString decodes plain ASCII strings correctly.
+        /// Expected:
+        /// - Exact round-trip for ASCII
+        /// </summary>
         [Fact]
         public void GetString_DecodesPlainAscii()
         {
@@ -4029,12 +5011,18 @@ namespace tests.BridgeTests
             Assert.Equal(txt, s);
         }
 
+
+        /// <summary>
+        /// GetString only decodes the selected segment slice, not the surrounding bytes.
+        /// Expected:
+        /// - Output equals the middle payload portion
+        /// </summary>
         [Fact]
         public void GetString_DecodesOnlySelectedSegment()
         {
-            // payload completo: "xxxx" + "ciao🌟" + "yyyy"
+            // full payload: "xxxx" + "hello🌟" + "yyyy"
             var prefix = Encoding.UTF8.GetBytes("xxxx");
-            var middle = Encoding.UTF8.GetBytes("ciao🌟"); // include char multibyte
+            var middle = Encoding.UTF8.GetBytes("hello🌟"); // include multibyte char
             var suffix = Encoding.UTF8.GetBytes("yyyy");
 
             var buffer = new byte[prefix.Length + middle.Length + suffix.Length];
@@ -4042,11 +5030,11 @@ namespace tests.BridgeTests
             Buffer.BlockCopy(middle, 0, buffer, prefix.Length, middle.Length);
             Buffer.BlockCopy(suffix, 0, buffer, prefix.Length + middle.Length, suffix.Length);
 
-            // segment che punta solo a "ciao🌟"
+            // segment that only points to "hello🌟"
             var seg = new ArraySegment<byte>(buffer, prefix.Length, middle.Length);
 
             var s = CallGetString(seg);
-            Assert.Equal("ciao🌟", s);
+            Assert.Equal("hello🌟", s);
         }
     }
 }

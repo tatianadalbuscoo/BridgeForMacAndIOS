@@ -1,18 +1,13 @@
-﻿#if TEST_STUBS
-// Global alias visible to ALL files compiled by the test project,
-// including those linked from the Android project.
-global using Activity = Android.App.Activity;
-#endif
+﻿/* -----------------------------------------------------------------------------
+ * TEST STUBS
+ * These types mimic a tiny subset of Android + Shimmer SDK APIs so we can
+ * compile and unit-test logic on .NET (without Android runtime or devices).
+ */
 
 #if TEST_STUBS
 
-// -----------------------------------------------------------------------------
-// TEST STUBS
-// These types mimic a tiny subset of Android + Shimmer SDK APIs so we can
-// compile and unit-test logic on .NET (without Android runtime or devices).
-// -----------------------------------------------------------------------------
 
-using System;
+global using Activity = Android.App.Activity;
 using System.Net.WebSockets;
 using System.Text;
 

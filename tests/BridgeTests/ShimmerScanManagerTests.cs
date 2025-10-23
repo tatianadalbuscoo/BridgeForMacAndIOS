@@ -1,17 +1,6 @@
-﻿/* ShimmerScanManagerTests.cs
-* Purpose: Unit tests for ShimmerScanManager file.
-* Scope: Covers Entry/Result models, constructor behavior, ScanAsync flow, LooksLikeShimmer heuristic,
-*        DiscoveryReceiver callbacks, and ShimmerBoardDetector internals:
-*        - GetExpansionBoardKindAndroidAsync (invalid MAC, detection failed)
-*        - TryDetectBoardKind (EXG/IMU/Unknown mapping, exception handling)
-*        - MapBoardStringToKind (EXG / IMU / Unknown)
-*        - FindExpansionTarget (BFS traversal, depth limit, cycle handling)
-*        - HasMethod (parameterless instance method detection)
-*        - TryWaitExpansionString (polling with mid-timeout refresh)
-*        - GetStringNoArgIfExists (method/property fallbacks to string)
-*        - SafeDelay (negative/zero/positive timing)
-*        - InvokeNoArgIfExists (safe no-arg invocation)
-*        - RefEqComparer (reference equality & hash; HashSet behavior)
+﻿/*
+ * ShimmerScanManagerTests.cs
+ * Purpose: Unit tests for ShimmerScanManager file.
  */
 
 using ShimmerBridgeScan;
@@ -41,7 +30,8 @@ namespace BridgeTests
         }
 
 
-        // -------- Entry class --------
+        // ----- Entry class -----
+
 
         /// <summary>
         /// Verifies default values of <see cref="Entry"/>.
@@ -88,12 +78,12 @@ namespace BridgeTests
         }
 
 
-        // -------- Result class --------
+        // ----- Result class -----
 
 
         /// <summary>
         /// Verifies the default state of Result.
-        /// Expect: both lists are non-null, empty, and are two distinct List instances.
+        /// Expected: both lists are non-null, empty, and are two distinct List instances.
         /// </summary>
         [Fact]
         public void Result_Defaults()
@@ -110,7 +100,7 @@ namespace BridgeTests
 
         /// <summary>
         /// Ensures Visible and Off track entries independently.
-        /// Expect: items added to Visible are not in Off (and vice versa); counts and membership match what we added.
+        /// Expected: items added to Visible are not in Off (and vice versa); counts and membership match what we added.
         /// </summary>
         [Fact]
         public void Result_AddVisibleAndOff_TrackedSeparately()
@@ -139,7 +129,7 @@ namespace BridgeTests
 
         /// <summary>
         /// Confirms Result does not enforce uniqueness.
-        /// Expect: adding the same reference twice to Visible results in two entries (same object instance).
+        /// Expected: adding the same reference twice to Visible results in two entries (same object instance).
         /// </summary>
         [Fact]
         public void Result_AllowsDuplicates_IfCallerAddsThem()
@@ -155,15 +145,13 @@ namespace BridgeTests
         }
 
 
-        // -------- Constructor --------
+        // ----- Constructor -----
 
 
         /// <summary>
         /// Verifies the constructor accepts a valid <see cref="Activity"/> and does not throw.
+        /// Expected: creating <see cref="ShimmerScanManager"/> with a non-null Activity completes without exceptions.
         /// </summary>
-        /// <remarks>
-        /// Expectation: creating <see cref="ShimmerScanManager"/> with a non-null Activity completes without exceptions.
-        /// </remarks>
         [Fact]
         public void Ctor_DoesNotThrow_WithActivity()
         {
@@ -174,11 +162,9 @@ namespace BridgeTests
 
         /// <summary>
         /// Ensures that when Bluetooth is disabled the scan returns an empty result.
-        /// </summary>
-        /// <remarks>
         /// Setup: the stubbed <see cref="Android.Bluetooth.BluetoothAdapter"/> is disabled by default.
-        /// Expectation: <c>ScanAsync</c> exits early and both <c>Visible</c> and <c>Off</c> lists are empty.
-        /// </remarks>
+        /// Expected: <c>ScanAsync</c> exits early and both <c>Visible</c> and <c>Off</c> lists are empty.
+        /// </summary>
         [Fact]
         public async Task Ctor_SetsAdapter_AndScanWithBluetoothDisabled_ReturnsEmpty()
         {
@@ -193,13 +179,12 @@ namespace BridgeTests
         }
 
 
+        /// <summary>
         /// Confirms that paired-but-not-discovered Shimmer devices are surfaced in the <c>Off</c> list.
-        /// </summary>
-        /// <remarks>
         /// Setup: enable Bluetooth, add one paired Shimmer-like device, perform a short scan that discovers nothing.
-        /// Expectation: <c>Visible</c> is empty; <c>Off</c> contains exactly that paired device with <c>IsPaired = true</c>
+        /// Expected: <c>Visible</c> is empty; <c>Off</c> contains exactly that paired device with <c>IsPaired = true</c>
         /// and <c>Type = DeviceOff</c>.
-        /// </remarks>
+        /// </summary>
         [Fact]
         public async Task ScanAsync_ListsPairedAsOff_WhenNotDiscovered()
         {
@@ -223,18 +208,16 @@ namespace BridgeTests
         }
 
 
-        // -------- ScanAsync behavior --------
+        // ----- ScanAsync behavior -----
 
 
         /// <summary>
         /// When BT is ON, a paired Shimmer device that is NOT discovered during the scan
         /// must be returned in the Off list.
-        /// </summary>
-        /// <remarks>
         /// Setup: enable Bluetooth; add one paired Shimmer-like device; short scan that discovers nothing.
-        /// Expectation: <c>Visible</c> is empty; <c>Off</c> has exactly that device with
+        /// Expected: <c>Visible</c> is empty; <c>Off</c> has exactly that device with
         /// <c>IsPaired = true</c> and <c>Type = DeviceOff</c>.
-        /// </remarks>
+        /// </summary>
         [Fact]
         public async Task ScanAsync_BtOn_PairedShimmerNotDiscovered_GoesToOff()
         {
@@ -262,14 +245,12 @@ namespace BridgeTests
         /// <summary>
         /// Non-Shimmer paired devices must be ignored, while Shimmer-like devices (by name or OUI)
         /// appear in the Off list if not discovered during the scan.
-        /// </summary>
-        /// <remarks>
         /// Setup: enable Bluetooth; add three paired devices:
         /// 1) non-Shimmer (ignored),
         /// 2) Shimmer by name,
         /// 3) Shimmer by OUI prefix 00:06:66.
-        /// Expectation: <c>Off</c> contains the two Shimmer-like MACs only; <c>Visible</c> is empty.
-        /// </remarks>
+        /// Expected: <c>Off</c> contains the two Shimmer-like MACs only; <c>Visible</c> is empty.
+        /// </summary>
         [Fact]
         public async Task ScanAsync_BtOn_IgnoresNonShimmerBonded()
         {
@@ -311,12 +292,10 @@ namespace BridgeTests
 
         /// <summary>
         /// The scan must start discovery and always stop it by the end (even on short runs).
-        /// </summary>
-        /// <remarks>
         /// Setup: enable Bluetooth and ensure the adapter is not discovering.
-        /// Expectation: after <c>ScanAsync</c>, <c>IsDiscovering</c> is <c>false</c>,
+        /// Expected: after <c>ScanAsync</c>, <c>IsDiscovering</c> is <c>false</c>,
         /// proving the manager toggled discovery and cleaned up correctly.
-        /// </remarks>
+        /// </summary>
         [Fact]
         public async Task ScanAsync_TogglesDiscovery_StartsAndStops()
         {
@@ -333,19 +312,17 @@ namespace BridgeTests
         }
 
 
-        // -------- LooksLikeShimmer behavior --------
+        // ----- LooksLikeShimmer behavior -----
 
 
         /// <summary>
         /// Verifies the Shimmer heuristic on many name/MAC combinations.
-        /// </summary>
-        /// <remarks>
-        /// Expectation:
+        /// Expected:
         /// - TRUE when the device name contains "Shimmer" (any case), starts with "SHIMMER3",
         ///   or when it looks like an RN-42 module ("RN42", "RNBT", "RN-42").
         /// - TRUE when the MAC uses the RN-42 OUI prefix "00:06:66" (case-insensitive).
         /// - FALSE for unrelated names/MACs and for null/empty inputs.
-        /// </remarks>
+        /// </summary>
         [Theory]
 
         // Match by name containing "Shimmer"
@@ -383,12 +360,10 @@ namespace BridgeTests
 
         /// <summary>
         /// Confirms the heuristic is tolerant to whitespace/case on name and MAC.
-        /// </summary>
-        /// <remarks>
-        /// Expectation:
+        /// Expected:
         /// - Leading whitespace before a name that contains "Shimmer" still returns TRUE.
         /// - Lowercase OUI "00:06:66" is treated the same as uppercase and returns TRUE.
-        /// </remarks>
+        /// </summary>
         [Fact]
         public void LooksLikeShimmer_AllowsWhitespaceAndMixedCase()
         {
@@ -397,11 +372,9 @@ namespace BridgeTests
         }
 
 
-        // -------- DiscoveryReceiver class --------
-        // -------- Constructor --------
+        // ----- DiscoveryReceiver class -----
+        // ----- Constructor -----
 
-
-        // ----- Helpers -----
 
         /// <summary>
         /// Helper: fetches the non-public nested type
@@ -449,12 +422,10 @@ namespace BridgeTests
         }
 
 
-        // ----- Tests -----
-
         /// <summary>
         /// Verifies that when an intent with action 'BluetoothDevice.ActionFound' is received,
         /// the receiver invokes the 'onFound' callback and does NOT invoke 'onFinished'.
-        /// Expectation: 'calledFound' is true, no exception is thrown, and since our stubs
+        /// Expected: 'calledFound' is true, no exception is thrown, and since our stubs
         /// don't expose extras, both 'devArg' and 'rssiArg' remain null.
         /// </summary>
         [Fact]
@@ -485,7 +456,7 @@ namespace BridgeTests
         /// <summary>
         /// Verifies that when an intent with action 'BluetoothAdapter.ActionDiscoveryFinished' is received,
         /// the receiver invokes the 'onFinished' callback and does NOT invoke 'onFound'.
-        /// Expectation: 'calledFinished' is true and no exception is thrown.
+        /// Expected: 'calledFinished' is true and no exception is thrown.
         /// </summary>
         [Fact]
         public void DiscoveryReceiver_OnFinished_IsInvoked_On_ActionDiscoveryFinished()
@@ -509,7 +480,7 @@ namespace BridgeTests
         /// <summary>
         /// Verifies that passing a null intent to 'OnReceive' is a no-op:
         /// no exception is thrown and neither callback is invoked.
-        /// Expectation: both 'calledFound' and 'calledFinished' remain false.
+        /// Expected: both 'calledFound' and 'calledFinished' remain false.
         /// </summary>
         [Fact]
         public void DiscoveryReceiver_OnReceive_NullIntent_DoesNotThrow_AndNoCallbacks()
@@ -530,23 +501,21 @@ namespace BridgeTests
         }
 
 
-        // -------- OnReceive behavior --------
+        // ----- OnReceive behavior -----
 
-
-        // ----- Helpers -----
 
         /// <summary>
-        /// Returns the non-public nested type 'DiscoveryReceiver' from ShimmerScanManager.
+        /// Helper: Returns the non-public nested type 'DiscoveryReceiver' from ShimmerScanManager.
         /// Used by tests to reflectively construct the receiver.
-        /// Expectation: never returns null; throws if the type is missing.
+        /// Expected: never returns null; throws if the type is missing.
         /// </summary>
         static Type RxType() =>
            typeof(ShimmerScanManager).GetNestedType("DiscoveryReceiver", BindingFlags.NonPublic)!;
 
 
         /// <summary>
-        /// Creates a new DiscoveryReceiver instance via reflection, wiring the provided callbacks.
-        /// Expectation: returns a valid instance constructed with (onFound, onFinished).
+        /// Helper: Creates a new DiscoveryReceiver instance via reflection, wiring the provided callbacks.
+        /// Expected: returns a valid instance constructed with (onFound, onFinished).
         /// </summary>
         static object NewRx(Action<Android.Bluetooth.BluetoothDevice?, int?> onFound, Action onFinished)
         {
@@ -562,7 +531,7 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Invokes the receiver's OnReceive method with a null context and the given intent.
+        /// Helper: Invokes the receiver's OnReceive method with a null context and the given intent.
         /// Expectation: forwards the broadcast to the receiver without throwing.
         /// </summary>
         static void CallOnReceive(object rx, Android.Content.Intent? intent)
@@ -572,12 +541,10 @@ namespace BridgeTests
         }
 
 
-        // ----- Tests -----
-
         /// <summary>
         /// Verifies that action 'BluetoothDevice.ActionFound' triggers the onFound callback,
         /// while onFinished is NOT called. With current stubs, extras are absent.
-        /// Expectation: calledFound == true, dev == null, rssi == null.
+        /// Expected: calledFound == true, dev == null, rssi == null.
         /// </summary>
         [Fact]
         public void ActionFound_calls_onFound_with_null_args_with_current_stubs()
@@ -603,7 +570,7 @@ namespace BridgeTests
         /// <summary>
         /// Verifies that action 'BluetoothAdapter.ActionDiscoveryFinished' triggers the onFinished callback
         /// and does NOT call onFound.
-        /// Expectation: finished == true.
+        /// Expected: finished == true.
         /// </summary>
         [Fact]
         public void ActionDiscoveryFinished_calls_onFinished()
@@ -625,7 +592,7 @@ namespace BridgeTests
 
         /// <summary>
         /// Verifies that a null intent results in a no-op: no callbacks are fired and no exception is thrown.
-        /// Expectation: calledFound == false and calledFinished == false.
+        /// Expected: calledFound == false and calledFinished == false.
         /// </summary>
         [Fact]
         public void NullIntent_does_nothing()
@@ -644,13 +611,13 @@ namespace BridgeTests
         }
 
 
-        // -------- ShimmerBoardDetector class --------
-        // -------- GetExpansionBoardKindAndroidAsync behavior --------
+        // ----- ShimmerBoardDetector class -----
+        // ----- GetExpansionBoardKindAndroidAsync behavior -----
 
 
         /// <summary>
         /// Ensures the detector short-circuits on invalid MAC input.
-        /// Expectation: returns ok == false, kind == Unknown, raw == "Invalid MAC".
+        /// Expected: returns ok == false, kind == Unknown, raw == "Invalid MAC".
         /// </summary>
         [Fact]
         public async Task GetExpansionBoardKindAndroidAsync_InvalidMac_EarlyReturns()
@@ -668,7 +635,7 @@ namespace BridgeTests
         /// <summary>
         /// Verifies behavior when the SDK session connects but no board info can be detected
         /// (with current test stub: Connect() succeeds; TryDetectBoardKind fails → "Detection failed").
-        /// Expectation: returns ok == false, kind == Unknown, raw == "Detection failed".
+        /// Expected: returns ok == false, kind == Unknown, raw == "Detection failed".
         /// </summary>
         [Fact]
         public async Task GetExpansionBoardKindAndroidAsync_NotConnected_TimesOut()
@@ -686,13 +653,11 @@ namespace BridgeTests
         }
 
 
-        // -------- TryDetectBoardKind behavior --------
+        // ----- TryDetectBoardKind behavior -----
 
-
-        // ----- Helpers -----
 
         /// <summary>
-        /// Minimal fake “expansion target” the reflection-based detector can discover.
+        /// Helper: Minimal fake “expansion target” the reflection-based detector can discover.
         /// Exposes power/read calls and <c>GetExpansionBoard()</c>, with the return
         /// value controlled by the <see cref="Board"/> property.
         /// </summary>
@@ -707,7 +672,7 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Fake target that throws from <c>GetExpansionBoard()</c>.
+        /// Helper: Fake target that throws from <c>GetExpansionBoard()</c>.
         /// Used to verify the detector swallows exceptions and reports failure.
         /// </summary>
         internal sealed class ThrowingExpansionTarget
@@ -720,7 +685,7 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Reflection helper that invokes the internal
+        /// Helper: Reflection helper that invokes the internal
         /// <c>ShimmerBoardDetector.TryDetectBoardKind</c> and returns tuple-like values:
         /// <c>(ok, kind as int, raw string)</c>.
         /// </summary>
@@ -751,11 +716,9 @@ namespace BridgeTests
         }
 
 
-        // ----- Tests -----
-
         /// <summary>
         /// Not connected -> detector should fail early.
-        /// Expect: ok=false, kind=Unknown(0), raw="".
+        /// Expected: ok=false, kind=Unknown(0), raw="".
         /// </summary>
         [Fact]
         public void TryDetectBoardKind_NotConnected_ReturnsFalseUnknown()
@@ -770,7 +733,7 @@ namespace BridgeTests
 
         /// <summary>
         /// Board string contains "EXG" (any case) -> map to EXG.
-        /// Expect: ok=true, kind=EXG(2), raw="EXG_DAUGHTER".
+        /// Expected: ok=true, kind=EXG(2), raw="EXG_DAUGHTER".
         /// </summary>
         [Fact]
         public void TryDetectBoardKind_Maps_EXG()
@@ -788,7 +751,7 @@ namespace BridgeTests
 
         /// <summary>
         /// Non-empty board string without "EXG" -> fallback to IMU.
-        /// Expect: ok=true, kind=IMU(1), raw="IMU_MPU".
+        /// Expected: ok=true, kind=IMU(1), raw="IMU_MPU".
         /// </summary>
         [Fact]
         public void TryDetectBoardKind_Maps_IMU()
@@ -806,7 +769,7 @@ namespace BridgeTests
 
         /// <summary>
         /// Empty/whitespace board string means detection didn’t yield a value.
-        /// Expect: ok=false, kind=Unknown(0), raw="".
+        /// Expected: ok=false, kind=Unknown(0), raw="".
         /// </summary>
         [Theory]
         [InlineData(null)]
@@ -827,7 +790,7 @@ namespace BridgeTests
 
         /// <summary>
         /// If the expansion target throws during read, the detector must catch and fail gracefully.
-        /// Expect: ok=false, kind=Unknown(0), raw="".
+        /// Expected: ok=false, kind=Unknown(0), raw="".
         /// </summary>
         [Fact]
         public void TryDetectBoardKind_Exceptions_AreCaught_ReturnsFalse()
@@ -843,10 +806,8 @@ namespace BridgeTests
         }
 
 
-        // -------- MapBoardStringToKind behavior --------
+        // ----- MapBoardStringToKind behavior -----
 
-
-        // ----- Helpers -----
 
         /// <summary>
         /// Helper: Reflection helper that retrieves the private static
@@ -881,8 +842,6 @@ namespace BridgeTests
         static string EnumName(object enumVal)
             => Enum.GetName(enumVal.GetType(), enumVal)!;
 
-
-        // ----- Tests -----
 
         /// <summary>
         /// Verifies that null/empty/whitespace inputs map to <c>Unknown</c>.
@@ -931,15 +890,16 @@ namespace BridgeTests
         }
 
 
-        // -------- FindExpansionTarget behavior --------
+        // ----- FindExpansionTarget behavior -----
 
-
-        // ----- helpers -----
 
         /// <summary>
-        /// Reflection helper: obtains the private static method ShimmerBoardDetector.FindExpansionTarget.
-        /// Expected: returns a valid MethodInfo pointing to the target private method.
+        /// Helper: obtains the private static method ShimmerBoardDetector.FindExpansionTarget.
         /// </summary>
+        /// <returns>
+        /// A non-null <see cref="System.Reflection.MethodInfo"/> for the private
+        /// <c>FindExpansionTarget</c> method; the test will fail if it cannot be located.
+        /// </returns>
         static MethodInfo Get_FindExpansionTarget()
         {
             var tSbm = typeof(ShimmerScanManager).GetNestedType("ShimmerBoardDetector", BindingFlags.NonPublic);
@@ -954,6 +914,10 @@ namespace BridgeTests
         /// Reflection helper: invokes FindExpansionTarget(root, maxDepth).
         /// Expected: returns the object that exposes GetExpansionBoard(), or null when not found/allowed by depth.
         /// </summary>
+        /// <returns>
+        /// The discovered target object that implements a parameterless <c>GetExpansionBoard()</c>,
+        /// or <c>null</c> if no suitable target is found within the specified depth.
+        /// </returns>
         static object? Call_FindExpansionTarget(object? root, int maxDepth)
         {
             var mi = Get_FindExpansionTarget();
@@ -1123,15 +1087,16 @@ namespace BridgeTests
         }
 
 
-        // -------- HasMethod behavior --------
+        // ----- HasMethod behavior -----
 
-
-        // ----- helpers -----
 
         /// <summary>
-        /// Reflection helper: fetches the private static ShimmerBoardDetector.HasMethod.
-        /// Expected: returns a non-null MethodInfo pointing to the private method under test.
+        /// Helper: Reflection helper that fetches the private static ShimmerBoardDetector.HasMethod.
         /// </summary>
+        /// <returns>
+        /// A <see cref="MethodInfo"/> representing the private static <c>HasMethod</c>
+        /// defined on <c>ShimmerScanManager.ShimmerBoardDetector</c>.
+        /// </returns>
         static MethodInfo Get_HasMethod()
         {
             var tDet = typeof(ShimmerScanManager)
@@ -1147,8 +1112,13 @@ namespace BridgeTests
 
         /// <summary>
         /// Reflection helper: invokes HasMethod(instance, methodName) and returns its bool result.
-        /// Expected: mirrors the private method behavior for different target types/signatures.
         /// </summary>
+        /// <param name="instance">Object to inspect for the target method.</param>
+        /// <param name="name">Method name to look up on <paramref name="instance"/>.</param>
+        /// <returns>
+        /// <c>true</c> if <paramref name="instance"/> exposes a parameterless instance method
+        /// named <paramref name="name"/> (public or non-public); otherwise <c>false</c>.
+        /// </returns>
         static bool Call_HasMethod(object instance, string name)
         {
             var mi = Get_HasMethod();
@@ -1270,15 +1240,17 @@ namespace BridgeTests
         }
 
 
-        // -------- TryWaitExpansionString behavior --------
+        // ----- TryWaitExpansionString behavior -----
 
-
-        // ----- helpers -----
 
         /// <summary>
         /// Reflection helper: resolves the private static ShimmerBoardDetector.TryWaitExpansionString.
-        /// Expected: returns a non-null MethodInfo to invoke in tests.
         /// </summary>
+        /// <returns>
+        /// A <see cref="MethodInfo"/> representing the non-public static method
+        /// <c>TryWaitExpansionString(object target, out string boardStr, int timeoutMs)</c>
+        /// on <c>ShimmerBoardDetector</c>.
+        /// </returns>
         static MethodInfo Get_TryWaitExpansionString()
         {
             var tDet = typeof(ShimmerScanManager)
@@ -1294,8 +1266,14 @@ namespace BridgeTests
 
         /// <summary>
         /// Reflection helper: invokes TryWaitExpansionString(target, out boardStr, timeoutMs).
-        /// Expected: returns (ok, board) mirroring the private method behavior for the provided target.
         /// </summary>
+        /// <param name="target">Object exposing <c>GetExpansionBoard()</c> (and optionally <c>ReadExpansionBoard()</c>).</param>
+        /// <param name="timeoutMs">Maximum time to wait, in milliseconds.</param>
+        /// <returns>
+        /// A tuple <c>(ok, board)</c> where:
+        /// - <c>ok</c> is <c>true</c> if a non-empty board string was obtained within the timeout; otherwise <c>false</c>.
+        /// - <c>board</c> is the retrieved board string (or empty if none was obtained).
+        /// </returns>
         static (bool ok, string board) Call_TryWait(object target, int timeoutMs)
         {
             var mi = Get_TryWaitExpansionString();
@@ -1310,9 +1288,9 @@ namespace BridgeTests
         // ----- test targets (fakes used by reflection in TryWaitExpansionString) -----
 
         /// <summary>
-        /// Fake target whose GetExpansionBoard immediately returns a non-empty value.
-        /// Expected: TryWaitExpansionString should succeed on the first check without waiting.
+        /// Obtains the private static method ShimmerBoardDetector.FindExpansionTarget.
         /// </summary>
+        /// <returns>The <see cref="MethodInfo"/> for the private FindExpansionTarget method.</returns>
         class ImmediateTarget
         {
             public string GetExpansionBoard() => "EXG_READY";
@@ -1396,15 +1374,13 @@ namespace BridgeTests
         }
 
 
-        // -------- GetStringNoArgIfExists behavior --------
+        // ----- GetStringNoArgIfExists behavior -----
 
-
-        // ----- helpers -----
 
         /// <summary>
-        /// Reflection helper: resolves the private static ShimmerBoardDetector.GetStringNoArgIfExists.
-        /// Expected: returns a non-null MethodInfo so tests can invoke the private method.
+        /// Helper: resolves the private static ShimmerBoardDetector.GetStringNoArgIfExists.
         /// </summary>
+        /// <returns>The <see cref="MethodInfo"/> for the private GetStringNoArgIfExists helper.</returns>
         static MethodInfo MI_GetStringNoArgIfExists()
         {
             var tDet = typeof(ShimmerScanManager)
@@ -1419,9 +1395,11 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Reflection helper: invokes GetStringNoArgIfExists(instance, methodName).
-        /// Expected: returns the string value (or null) produced by the private helper.
+        /// Helper: invokes GetStringNoArgIfExists(instance, methodName).
         /// </summary>
+        /// <param name="instance">Object to inspect via reflection.</param>
+        /// <param name="methodName">Parameterless method name to try (e.g., "GetExpansionBoard").</param>
+        /// <returns>The string value produced by the private helper, or <c>null</c> if none.</returns>
         static string? Call_GetStringNoArgIfExists(object instance, string methodName)
         {
             var mi = MI_GetStringNoArgIfExists();
@@ -1434,8 +1412,8 @@ namespace BridgeTests
 
         /// <summary>
         /// Method exists and returns a string.
-        /// Expected: helper should return "EXG_FROM_METHOD".
         /// </summary>
+        /// <returns>"EXG_FROM_METHOD"</returns>
         class MethodReturnsString
         {
             public string GetExpansionBoard() => "EXG_FROM_METHOD";
@@ -1444,8 +1422,8 @@ namespace BridgeTests
 
         /// <summary>
         /// Method exists but returns a non-string value.
-        /// Expected: helper should use ToString() and return "42".
         /// </summary>
+        /// <returns>42</returns>
         class MethodReturnsNonString
         {
             public int GetExpansionBoard() => 42;
@@ -1454,8 +1432,8 @@ namespace BridgeTests
 
         /// <summary>
         /// Method exists but throws; a property fallback is available.
-        /// Expected: helper should swallow the exception and return "EXG_FROM_PROP" from the property.
         /// </summary>
+        /// <returns>Throws on <c>GetExpansionBoard()</c>; fallback property provides "EXG_FROM_PROP".</returns>
         class MethodThrowsThenProp
         {
             public string GetExpansionBoard() => throw new System.Exception("boom");
@@ -1465,8 +1443,8 @@ namespace BridgeTests
 
         /// <summary>
         /// No method; primary property present.
-        /// Expected: helper should read ExpansionBoard and return "IMU_FROM_PROP".
         /// </summary>
+        /// <returns>"IMU_FROM_PROP" via <c>ExpansionBoard</c> property.</returns>
         class OnlyExpansionBoardProp
         {
             public string ExpansionBoard => "IMU_FROM_PROP";
@@ -1474,9 +1452,9 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// No method; ExpansionBoard is empty, ExpansionBoardID is set.
-        /// Expected: helper should return "EXG_ID_123" from ExpansionBoardID.
+        /// No method; <c>ExpansionBoard</c> is empty, <c>ExpansionBoardID</c> is set.
         /// </summary>
+        /// <returns>"EXG_ID_123" via <c>ExpansionBoardID</c> property.</returns>
         class ExpansionBoardIdProp
         {
             public string ExpansionBoard => "   ";
@@ -1485,9 +1463,9 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// No method; first two properties are empty, DaughterCardID is set.
-        /// Expected: helper should return "IMU_DAUGHTER".
+        /// No method; first two properties are empty, <c>DaughterCardID</c> is set.
         /// </summary>
+        /// <returns>"IMU_DAUGHTER" via <c>DaughterCardID</c> property.</returns>
         class DaughterCardProp
         {
             public string? ExpansionBoard => null;
@@ -1498,8 +1476,8 @@ namespace BridgeTests
 
         /// <summary>
         /// No method and all properties empty/null.
-        /// Expected: helper should return null.
         /// </summary>
+        /// <returns><c>null</c></returns>
         class NothingUseful
         {
             public string? ExpansionBoard => "   ";
@@ -1601,15 +1579,13 @@ namespace BridgeTests
         }
 
 
-        // -------- SafeDelay behavior --------
+        // ----- SafeDelay behavior -----
 
-
-        // ----- helpers -----
 
         /// <summary>
-        /// Reflection helper: resolves the private static ShimmerBoardDetector.SafeDelay method.
-        /// Expected: returns a non-null MethodInfo so tests can invoke the private method.
+        /// Helper: resolves the private static ShimmerBoardDetector.SafeDelay method.
         /// </summary>
+        /// <returns>The <see cref="MethodInfo"/> for the private static <c>SafeDelay</c> method.</returns>
         static MethodInfo MI_SafeDelay()
         {
             var tDet = typeof(ShimmerScanManager)
@@ -1624,16 +1600,13 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Reflection helper: invokes SafeDelay(ms) with the provided milliseconds.
-        /// Expected: should not throw for any integer input.
+        /// Helper: invokes SafeDelay(ms) with the provided milliseconds.
         /// </summary>
         static void Call_SafeDelay(int ms)
         {
             MI_SafeDelay().Invoke(null, new object[] { ms });
         }
 
-
-        // ----- tests -----
 
         /// <summary>
         /// Verifies SafeDelay handles negative values without throwing and returns quickly.
@@ -1688,15 +1661,13 @@ namespace BridgeTests
         }
 
 
-        // -------- InvokeNoArgIfExists behavior --------
+        // ----- InvokeNoArgIfExists behavior -----
 
-
-        // ----- helpers -----
 
         /// <summary>
-        /// Reflection helper: resolves the private static ShimmerBoardDetector.InvokeNoArgIfExists method.
-        /// Expected: returns a non-null MethodInfo so tests can invoke the private method.
+        /// Helper: resolves the private static ShimmerBoardDetector.InvokeNoArgIfExists method.
         /// </summary>
+        /// <returns>The <see cref="MethodInfo"/> for the private static <c>InvokeNoArgIfExists</c> method.</returns>
         static MethodInfo MI_InvokeNoArgIfExists()
         {
             var tDet = typeof(ShimmerScanManager)
@@ -1711,9 +1682,9 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Reflection helper: invokes InvokeNoArgIfExists(instance, methodName) and returns the result.
-        /// Expected: propagates the private method’s return value (or null) without throwing.
+        /// Helper: invokes InvokeNoArgIfExists(instance, methodName) and returns the result.
         /// </summary>
+        /// <returns>The invocation result, or <c>null</c> if the method is missing or throws.</returns>
         static object? Call_InvokeNoArgIfExists(object instance, string methodName)
         {
             return MI_InvokeNoArgIfExists().Invoke(null, new object?[] { instance, methodName });
@@ -1812,13 +1783,11 @@ namespace BridgeTests
         // ----- RefEqComparer class -----
 
 
-        // ----- helpers -----
-
         /// <summary>
-        /// Locates the private nested type <c>ShimmerBoardDetector.RefEqComparer</c>
+        /// Helper: Locates the private nested type <c>ShimmerBoardDetector.RefEqComparer</c>
         /// via reflection so we can instantiate and call it from tests.
-        /// Expected: returns a non-null <see cref="Type"/>.
         /// </summary>
+        /// <returns>The non-public <see cref="Type"/> of <c>RefEqComparer</c>.</returns>
         static Type RefEqComparerType()
         {
             var det = typeof(ShimmerScanManager)
@@ -1832,9 +1801,9 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Creates an instance of the private <c>RefEqComparer</c> using its non-public constructor.
-        /// Expected: returns a valid comparer instance.
+        /// Helper: Creates an instance of the private <c>RefEqComparer</c> using its non-public constructor.
         /// </summary>
+        /// <returns>A new comparer instance of the private <c>RefEqComparer</c> type.</returns>
         static object NewRefEqComparer()
         {
             var t = RefEqComparerType();
@@ -1845,9 +1814,9 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Invokes <c>IEqualityComparer.Equals(object, object)</c> on the comparer via reflection.
-        /// Expected: returns the boolean equality result using reference equality semantics.
+        /// Helper: Invokes <c>IEqualityComparer.Equals(object, object)</c> on the comparer via reflection.
         /// </summary>
+        /// <returns><c>true</c> if <paramref name="x"/> and <paramref name="y"/> are the same reference; otherwise <c>false</c>.</returns>
         static bool RefEqEquals(object cmp, object? x, object? y)
         {
             var t = RefEqComparerType();
@@ -1864,9 +1833,9 @@ namespace BridgeTests
 
 
         /// <summary>
-        /// Invokes <c>IEqualityComparer.GetHashCode(object)</c> on the comparer via reflection.
-        /// Expected: returns a hash code based on reference identity, stable for the same object.
+        /// Helper: Invokes <c>IEqualityComparer.GetHashCode(object)</c> on the comparer via reflection.
         /// </summary>
+        /// <returns>A hash code derived from the object's reference identity.</returns>
         static int RefEqGetHashCode(object cmp, object obj)
         {
             var t = RefEqComparerType();
@@ -1881,8 +1850,6 @@ namespace BridgeTests
             return (int)mi!.Invoke(cmp, new object[] { obj })!;
         }
 
-
-        // ----- tests -----
 
         /// <summary>
         /// Verifies that two references pointing to the same instance are considered equal.

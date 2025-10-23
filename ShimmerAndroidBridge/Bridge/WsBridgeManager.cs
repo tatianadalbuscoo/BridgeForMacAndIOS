@@ -780,7 +780,9 @@ namespace ShimmerBridgeMangager
                 if (_currentCfg.EnableMagnetometer) list.Add("mag");
                 if (_currentCfg.EnablePressureTemperature) { list.Add("temp"); list.Add("press"); }
                 if (_currentCfg.EnableBattery) list.Add("vbatt");
-                if (_currentCfg.EnableExtA6 || _currentCfg.EnableExtA7 || _currentCfg.EnableExtA15) list.Add("ext");
+                if (_currentCfg.EnableExtA6) list.Add("ext6");
+                if (_currentCfg.EnableExtA7) list.Add("ext7");
+                if (_currentCfg.EnableExtA15) list.Add("ext15");
                 return list;
             }
 
