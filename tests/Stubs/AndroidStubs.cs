@@ -1,5 +1,5 @@
 ﻿/*
- * TEST STUBS
+ * AndroidStubs.cs
  * These types mimic a tiny subset of Android + Shimmer SDK APIs so we can
  * compile and unit-test logic on .NET (without Android runtime or devices).
  */
