@@ -4,10 +4,11 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 
-		<!-- Flag che “scorre” anche nei ProjectReference -->
+		<!-- Flag that also flows through ProjectReference -->
 		<UseTestStubs>true</UseTestStubs>
 		<DefineConstants>$(DefineConstants);TEST_STUBS</DefineConstants>
-		<!-- Lasciamo abilitato l'auto-include dei .cs locali -->
+
+		<!-- Keep auto-include of local .cs files enabled -->
 		<EnableDefaultCompileItems>true</EnableDefaultCompileItems>
 	</PropertyGroup>
 
@@ -18,13 +19,13 @@
 		<PackageReference Include="coverlet.collector" Version="6.0.2" />
 	</ItemGroup>
 
-	<!-- Sorgenti sotto test (link dal progetto Bridge) -->
+	<!-- Sources under test (linked from Bridge project) -->
 	<ItemGroup>
 		<Compile Include="..\ShimmerAndroidBridge\Bridge\WsBridgeManager.cs" Link="UnderTest\WsBridgeManager.cs" />
 		<Compile Include="..\ShimmerAndroidBridge\Bridge\ShimmerScanManager.cs" Link="UnderTest\ShimmerScanManager.cs" />
 	</ItemGroup>
 
-	<!-- NON referenziare la DLL reale ShimmerAPI quando usi gli stub -->
+	<!-- Do NOT reference the real ShimmerAPI when using stubs -->
 	<ItemGroup Condition="'$(UseTestStubs)'!='true'">
 		<ProjectReference Include="..\ShimmerAPI\ShimmerAPI.csproj" />
 	</ItemGroup>
