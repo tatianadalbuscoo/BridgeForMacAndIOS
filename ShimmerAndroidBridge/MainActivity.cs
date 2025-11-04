@@ -561,6 +561,16 @@ namespace ShimmerBridge
             SetBadge(ui.Badge, type);       // Update colored badge text/background
             ui.ExgRow.Visibility =          // Show EXG mode selector only for EXG devices 
                 type == ShimmerScanManager.DeviceType.EXG ? ViewStates.Visible : ViewStates.Gone;
+            // Hide the Connect "box" if OFF or Unknown
+            ui.Connect.Visibility =
+                (type == ShimmerScanManager.DeviceType.IMU || type == ShimmerScanManager.DeviceType.EXG)
+                ? ViewStates.Visible
+                : ViewStates.Gone;
+
+            // Remove the checkmark
+            if (ui.Connect.Visibility == ViewStates.Gone && ui.Connect.Checked)
+                ui.Connect.Checked = false;
+
         }
 
 
