@@ -17,6 +17,7 @@ using ShimmerSDK.Android;
 using ShimmerAPI;
 using System.Text.Json.Serialization;
 using ShimmerBridgeScan;
+using System.Net;
 
 
 namespace ShimmerBridgeMangager
@@ -150,15 +151,16 @@ namespace ShimmerBridgeMangager
 
 
         /// <summary>
-        /// Starts the WebSocket server on the device's local Wi-Fi IP and wires up connection/message handlers.
-        /// If the server is already running, the call is a no-op.
+        /// Starts the WebSocket server on the device's local Wi-Fi IP and wires up handlers.
+        /// On Android, HttpListener is not available: if starting the server throws
+        /// HttpListenerException, we gracefully disable the WS bridge (set _ws = null)
+        /// and keep the app running without crashing.
         /// </summary>
         /// <param name="activity">Android activity used to resolve the Wi-Fi service and local IP.</param>
         /// <param name="port">TCP port for the WebSocket server (default: 8787).</param>
-        /// <returns>A completed task once the server is started or already running.</returns>
+        /// <returns>Completed task once the server is started or gracefully disabled.</returns>
         public Task StartAsync(Activity activity, int port = 8787)
         {
-
             // no-op if already started
             if (IsRunning) return Task.CompletedTask;
 
@@ -168,25 +170,37 @@ namespace ShimmerBridgeMangager
             _ws.ClientConnected += (s, e) =>
             {
                 Log?.Invoke($"WS client {e.Client.Guid} connected");
-
-                // init empty subscription set
                 _subscriptions.TryAdd(e.Client.Guid, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             };
 
             _ws.ClientDisconnected += (s, e) =>
             {
                 Log?.Invoke($"WS client {e.Client.Guid} disconnected");
-
-                // cleanup subscriptions
                 _subscriptions.TryRemove(e.Client.Guid, out _);
             };
 
-            // route messages to handler
             _ws.MessageReceived += OnMessage;
 
-            // start listening
-            _ws.Start();
-            Log?.Invoke($"WS on ws://{ip}:{port}/");
+            try
+            {
+                _ws.Start();
+                Log?.Invoke($"WS on ws://{ip}:{port}/");
+            }
+            catch (HttpListenerException ex)
+            {
+                // Android path: HttpListener not supported — disable WS, keep app alive
+                Log?.Invoke($"WS disabled on Android: {ex.Message}");
+                try { _ws.Dispose(); } catch { }
+                _ws = null;
+            }
+            catch (Exception ex)
+            {
+                // Any other startup failure — disable WS to avoid crashes
+                Log?.Invoke($"WS start failed: {ex.Message}");
+                try { _ws?.Dispose(); } catch { }
+                _ws = null;
+            }
+
             return Task.CompletedTask;
         }
 
