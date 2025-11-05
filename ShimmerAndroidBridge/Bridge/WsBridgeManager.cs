@@ -1473,6 +1473,5 @@ namespace ShimmerBridgeMangager
         /// <returns>The decoded string.</returns>
         static string GetString(ArraySegment<byte> seg) =>
             Encoding.UTF8.GetString(seg.Array!, seg.Offset, seg.Count);
-
     }
 }
