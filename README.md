@@ -9,8 +9,8 @@ It is designed to be used together with the MAUI app here: **ShimmerMobileApp** 
 
 ## Overview
 
-> **Important (iOS/MacCatalyst):** Shimmer3 uses **Bluetooth Classic (SPP/RFCOMM via RN-42)**. Apps on iOS and Mac **via MacCatalyst** can only use **CoreBluetooth (BLE/GATT)**; SPP is available **only** to MFi/iAP accessories.  
-> **Consequence:** you cannot pair directly to Shimmer3 from iOS or MacCatalyst.
+**Important (iOS/MacCatalyst):** Shimmer3 uses **Bluetooth Classic (SPP/RFCOMM via RN-42)**. Apps on iOS and Mac **via MacCatalyst** can only use **CoreBluetooth (BLE/GATT)**; SPP is available **only** to MFi/iAP accessories.  
+**Consequence:** you cannot pair directly to Shimmer3 from iOS or MacCatalyst.
 
 **Why Mac can’t do SPP in this app:** On Mac, the MAUI app runs as **MacCatalyst**, which reuses the **iOS API surface**. That means you still get **CoreBluetooth-only (BLE/GATT)** and **no RFCOMM/SPP**, even though macOS natively supports RFCOMM in other frameworks. MacCatalyst does **not** expose those macOS-only APIs.
 
