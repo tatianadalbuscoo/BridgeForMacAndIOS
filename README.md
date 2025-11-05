@@ -19,7 +19,7 @@ This repository provides an **Android-based bridge** so you can keep your **Shim
 
 **How it works (no hardware change):**
 - An **Android device** connects to **Shimmer3** over **Bluetooth Classic (SPP/RFCOMM)**.
-- The Android bridge **reads the sensor stream** and **re-publishes** it on the local network (e.g., **TCP** or **WebSocket**).
+- The Android bridge **reads the sensor stream** and **re-publishes** it on the local network (**WebSocket**).
 - The **.NET MAUI app** running on **iPhone/iPad (iOS)** or **Mac (MacCatalyst)** then **connects to the Android device’s IP:port** on the same Wi‑Fi/hotspot and **receives the packets as-is**.
 
 This repository also includes a small test suite to prevent regressions.
