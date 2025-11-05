@@ -55,7 +55,7 @@ You can proceed in **two way** to deploy the Android bridge:
   Open `BridgeForMacAndIOS.sln` -> set the **ShimmerAndroidBridge** project as *Startup Project* -> select your **Android device** -> **Debug -> Start Debugging**.
 
 - **Visual Studio Code** (with **C# Dev Kit** + Android tooling):  
-  Open the folder -> choose the **ShimmerAndroidBridge** folder -> In the visual studio code terminal run:
+  Open Visual Studio Code and choose the **ShimmerAndroidBridge** folder -> In the visual studio code terminal run:
   ```bash
   dotnet build .\ShimmerAndroidBridge\ShimmerAndroidBridge.csproj -f net8.0-android -c Debug -t:Run
   ```
