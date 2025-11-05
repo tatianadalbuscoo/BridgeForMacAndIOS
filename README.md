@@ -26,7 +26,7 @@ This repository also includes a small test suite to prevent regressions.
 
 ---
 
-## Prerequisites (for this bridge only)
+## Prerequisites
 
 - **Android device (bridge)**: phone/tablet with **Bluetooth Classic (SPP/RFCOMM)** and Wi-Fi.
 - **.NET SDK 8.0** to build the Android app.
